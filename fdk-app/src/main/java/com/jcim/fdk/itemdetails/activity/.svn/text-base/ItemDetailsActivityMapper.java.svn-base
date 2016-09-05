@@ -1,0 +1,71 @@
+package com.inubit.tui.taskmanager.app.itemdetails.activity;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationContext;
+
+import com.inubit.gui.vaadin.mvp.activity.AbstractActivity;
+import com.inubit.gui.vaadin.mvp.activity.Activity;
+import com.inubit.gui.vaadin.mvp.activity.ActivityMapper;
+import com.inubit.gui.vaadin.mvp.place.Place;
+import com.inubit.gui.vaadin.mvp.place.PlaceController;
+import com.inubit.tui.taskmanager.app.communication.activity.CommunicationActivity;
+import com.inubit.tui.taskmanager.app.details.activity.DetailsActivity;
+import com.inubit.tui.taskmanager.app.history.activity.HistoryActivity;
+import com.inubit.tui.taskmanager.app.itemdetails.place.ItemDetailsPlace;
+import com.inubit.tui.taskmanager.app.itemlist.activity.ItemListActivity;
+import com.inubit.tui.taskmanager.app.itemlist.place.ItemListPlace;
+import com.inubit.tui.taskmanager.app.relatedincidents.activity.RelatedIncidentsActivity;
+import com.inubit.tui.taskmanager.service.IncidentLockException;
+
+
+public class ItemDetailsActivityMapper implements ActivityMapper {
+
+	private static final Logger log = LoggerFactory.getLogger(ItemDetailsActivityMapper.class);
+	private AbstractActivity activity;
+	private ApplicationContext ctx;
+	private Place parentPlace;
+	
+	public ItemDetailsActivityMapper(final ApplicationContext ctx,Place parentPlace) {
+		this.ctx = ctx;
+		this.parentPlace = parentPlace;
+	}
+	
+	@Override
+	public Activity getActivity(Place place) {
+		
+		if (place instanceof ItemListPlace){
+			ctx.getParent().getBean(PlaceController.class).goTo(place);
+    		return null;
+		}
+		
+		final ItemDetailsPlace actionPlace = (ItemDetailsPlace)place;
+		
+		switch (actionPlace.getAction()) {		
+		
+		case DETAILS: log.debug("ActionDetails");
+			try {
+				activity = new DetailsActivity(ctx,parentPlace);
+			} catch (IncidentLockException e) {
+				return null;
+			}
+			return activity; 
+			
+		case COMMUNICATION: log.debug("ActionCommunication");
+			activity = new CommunicationActivity(ctx,parentPlace); 
+			return activity;
+			
+		case HISTORY: log.debug("ActionHistory");
+			activity = new HistoryActivity(ctx,parentPlace); 
+			return  activity;
+			
+		case OTHERINCIDENTS: log.debug("ActionOtherIncidents");
+		activity = new RelatedIncidentsActivity(ctx,parentPlace); 
+		return  activity;
+
+		default:
+			return null;
+		}		
+	}
+	
+}

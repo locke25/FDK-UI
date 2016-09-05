@@ -1,0 +1,48 @@
+package com.inubit.tui.taskmanager.app.itemlist.activity;
+
+import org.springframework.context.ApplicationContext;
+
+import com.inubit.gui.vaadin.mvp.activity.Activity;
+import com.inubit.gui.vaadin.mvp.activity.ActivityMapper;
+import com.inubit.gui.vaadin.mvp.place.Place;
+import com.inubit.tui.taskmanager.app.itemdetails.activity.ItemDetailsActivity;
+import com.inubit.tui.taskmanager.app.itemdetails.activity.ItemDetailsMVPSubContainer;
+import com.inubit.tui.taskmanager.app.itemlist.place.ItemListPlace;
+import com.inubit.tui.taskmanager.app.workbench.activity.WorkbenchMVPSubContainer.Actions;
+import com.inubit.tui.taskmanager.app.workbench.place.WorkbenchPlace;
+
+public class ItemListActivityMapper implements ActivityMapper {
+
+	private ItemListActivity listActivity;
+	private ItemDetailsMVPSubContainer detailsActivity;
+	private ApplicationContext ctx;
+
+	public ItemListActivityMapper(ApplicationContext ctx) {
+		listActivity = new ItemListActivity(ctx);
+		this.ctx = ctx;
+		// detailsActivity = new ItemDetailsActivity(ctx);
+	}
+
+	@Override
+	public Activity getActivity(Place place) {
+
+		final ItemListPlace selectedPlace = (ItemListPlace) place;
+
+		if (selectedPlace.getAction().equals(Actions.LIST)) {
+			listActivity.update((ItemListPlace) place);
+			return listActivity;
+		} else if (selectedPlace.getAction() == Actions.SEARCHVOLLTEXT) {
+			listActivity.updateVolltextSearch((ItemListPlace)place);
+			return listActivity;
+		} else if (selectedPlace.getAction() == Actions.SEARCH) {
+			listActivity.updateSearch((ItemListPlace)place);
+			return listActivity;
+		} else {
+			if (detailsActivity == null) {
+				detailsActivity = new ItemDetailsMVPSubContainer(ctx);
+				detailsActivity.update(selectedPlace);
+			}
+			return detailsActivity;
+		}
+	}
+}

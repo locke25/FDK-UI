@@ -1,0 +1,449 @@
+package com.inubit.tui.taskmanager.app.details.activity;
+
+import java.io.IOException;
+import java.io.StringReader;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
+
+import net.anotheria.moskito.aop.annotation.Monitor;
+
+import org.apache.commons.lang.StringUtils;
+import org.jdom.Document;
+import org.jdom.Element;
+import org.jdom.JDOMException;
+import org.jdom.input.SAXBuilder;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationContext;
+import org.springframework.context.support.ResourceBundleMessageSource;
+
+import com.inubit.gui.vaadin.mvp.activity.AbstractActivity;
+import com.inubit.gui.vaadin.mvp.event.EventBus;
+import com.inubit.gui.vaadin.mvp.place.Place;
+import com.inubit.gui.vaadin.mvp.place.PlaceController;
+import com.inubit.gui.vaadin.mvp.shell.Shell;
+import com.inubit.gui.vaadin.mvp.view.ViewPort;
+import com.inubit.tui.taskmanager.app.TaskManagerApplication;
+import com.inubit.tui.taskmanager.app.details.event.CategorySelectedEvent;
+import com.inubit.tui.taskmanager.app.details.event.ContactSelectedEvent;
+import com.inubit.tui.taskmanager.app.details.util.TreeItem;
+import com.inubit.tui.taskmanager.app.details.util.TreeItemTyp;
+import com.inubit.tui.taskmanager.app.details.view.DetailsView;
+import com.inubit.tui.taskmanager.app.itemdetails.view.ItemDetailsView;
+import com.inubit.tui.taskmanager.app.itemlist.place.ItemListPlace;
+import com.inubit.tui.taskmanager.app.workbench.activity.WorkbenchMVPSubContainer.Actions;
+import com.inubit.tui.taskmanager.persistence.dao.AgencyDao;
+import com.inubit.tui.taskmanager.persistence.dao.CategoryDao;
+import com.inubit.tui.taskmanager.persistence.dao.ContactDao;
+import com.inubit.tui.taskmanager.persistence.dao.HistoryEntryDao;
+import com.inubit.tui.taskmanager.persistence.dao.IncidentDao;
+import com.inubit.tui.taskmanager.persistence.dao.QueueDao;
+import com.inubit.tui.taskmanager.persistence.dao.ServiceDifferenceDao;
+import com.inubit.tui.taskmanager.persistence.dao.SolutionCategoryDao;
+import com.inubit.tui.taskmanager.persistence.dao.ThreelcDao;
+import com.inubit.tui.taskmanager.persistence.dao.exceptions.CanNotReproducedException;
+import com.inubit.tui.taskmanager.persistence.domain.Contact;
+import com.inubit.tui.taskmanager.persistence.domain.HistoryAction;
+import com.inubit.tui.taskmanager.persistence.domain.Incident;
+import com.inubit.tui.taskmanager.persistence.domain.Queue;
+import com.inubit.tui.taskmanager.persistence.domain.ServiceDifference;
+import com.inubit.tui.taskmanager.persistence.domain.SolutionCategory;
+import com.inubit.tui.taskmanager.persistence.domain.category.AbstractCategory;
+import com.inubit.tui.taskmanager.persistence.domain.category.Category;
+import com.inubit.tui.taskmanager.persistence.service.ContactMappingPmService;
+import com.inubit.tui.taskmanager.persistence.service.ContactMappingZgbService;
+import com.inubit.tui.taskmanager.security.domain.Permission;
+import com.inubit.tui.taskmanager.security.domain.User;
+import com.inubit.tui.taskmanager.security.exceptions.AccessDeniedException;
+import com.inubit.tui.taskmanager.service.DatabusServiceQueue;
+import com.inubit.tui.taskmanager.service.IncidentLockException;
+import com.inubit.tui.taskmanager.service.IncidentLockService;
+import com.inubit.tui.taskmanager.service.ServiceFacade;
+
+@Monitor
+public class DetailsActivity extends AbstractActivity implements DetailsView.Presenter {
+
+    private static final Logger log = LoggerFactory.getLogger(DetailsActivity.class);
+
+    private DetailsView view;
+
+    private long incidentId;
+
+    private String bookingSetNbr;
+
+    private Shell shell;
+
+    private IncidentDao incidentDao;
+
+    private AgencyDao agencyDao;
+
+    private HistoryEntryDao historyDao;
+
+    private SolutionCategoryDao solutionCategoryDao;
+
+    private ServiceDifferenceDao serviceDifferenceDao;
+
+    private CategoryDao categoryDao;
+
+    private ThreelcDao threelcDao;
+
+    private ContactDao contactDao;
+
+    private QueueDao queueDao;
+
+    private ServiceFacade serviceFacade;
+
+    private DatabusServiceQueue databusServiceQueue;
+
+    private EventBus eventBus;
+
+    private TaskManagerApplication taskmanagerApp;
+
+    private final ContactMappingZgbService contactMappingZgbService;
+    
+    private final ContactMappingPmService contactMappingPmService;
+
+    private ResourceBundleMessageSource messageSource;
+
+    private IncidentLockService incidentLockService;
+
+    private PlaceController placeController;
+    
+    private ItemDetailsView itemDetailsView;
+
+    public DetailsActivity(ApplicationContext ctx, Place parentPlace) throws IncidentLockException {
+        view = ctx.getBean(DetailsView.class);
+        view.setPresenter(this);
+        messageSource = ctx.getBean(ResourceBundleMessageSource.class);
+        incidentLockService = ctx.getBean(IncidentLockService.class);
+        threelcDao = ctx.getBean(ThreelcDao.class);
+        incidentDao = ctx.getBean(IncidentDao.class);
+        historyDao = ctx.getBean(HistoryEntryDao.class);
+        agencyDao = ctx.getBean(AgencyDao.class);
+        shell = ctx.getBean(Shell.class);
+        solutionCategoryDao = ctx.getBean(SolutionCategoryDao.class);
+        serviceDifferenceDao = ctx.getBean(ServiceDifferenceDao.class);
+        taskmanagerApp = ctx.getBean(TaskManagerApplication.class);
+        serviceFacade = ctx.getBean(ServiceFacade.class);
+        categoryDao = ctx.getBean(CategoryDao.class);
+        contactDao = ctx.getBean(ContactDao.class);
+        queueDao = ctx.getBean(QueueDao.class);
+        databusServiceQueue = ctx.getBean(DatabusServiceQueue.class);
+        placeController = ctx.getBean(PlaceController.class);
+        contactMappingZgbService = ctx.getBean(ContactMappingZgbService.class);
+        contactMappingPmService = ctx.getBean(ContactMappingPmService.class);
+        itemDetailsView = ctx.getBean(ItemDetailsView.class);
+
+        Incident incident = loadIncident(((ItemListPlace) parentPlace).getItemId());
+        setViewMode(incident);
+
+        showData(incident.getId());
+    }
+
+    @Override
+    public void start(ViewPort display, EventBus eventBus) {
+        this.eventBus = eventBus;
+        display.setView(view);
+    }
+
+    @Override
+    public void update(Place place) {
+        log.info("Update DetailsActivity");
+        Incident incident = loadIncident(((ItemListPlace) place).getItemId());
+
+        if (incidentLockService.isLocked(((User) taskmanagerApp.getUser()), incident)) {
+            view.setFieldsEnabled(false);
+        } else {
+            try {
+                view.setFieldsEnabled(setViewMode(incident));
+            } catch (IncidentLockException e) {
+                log.debug(e.getMessage());
+                view.setFieldsEnabled(false);
+            }
+        }
+        showData(incident.getId());
+    }
+
+    /**
+     * Set view editable depends on incident status
+     * @param incident
+     * @throws IncidentLockException
+     */
+    public boolean setViewMode(Incident incident) throws IncidentLockException {
+        switch (incident.getStatus()) {
+            case NEW:
+                log.debug("Lock new incident -> {}", incident.getStatus());
+                lockIncident(incident);
+                return true;
+            case REMINDER_NECESSARY:
+                log.debug("Lock reminder -> {}", incident.getStatus());
+                lockIncident(incident);
+                return true;
+            case CLOSED_EXTERNAL:
+                log.debug("Lock geschlossen -> {}", incident.getStatus());
+                lockIncident(incident);
+                return true;
+            case RESPONSE_EXISTS:
+                log.debug("Lock antwort existiert -> {}", incident.getStatus());
+                lockIncident(incident);
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    private void showData(final long itemId) {
+        incidentId = itemId;
+        Incident incident = loadIncident(itemId);
+        
+        SolutionCategory selectedSolutionCategory = solutionCategoryDao.retrieve(incident.getSolutionCategoryId());
+        ServiceDifference selectedServiceDifference = serviceDifferenceDao.retrieve(incident.getServiceDifferenceId());
+        Category selectedCategory = categoryDao.retrieve(incident.getCategoryId());
+
+        List<Contact> contactsPM = contactMappingPmService.getContacts(incident);
+        List<Contact> contactsZGB = contactMappingZgbService.getContacts(incident);
+
+        view.showData(incident, selectedSolutionCategory, selectedServiceDifference, selectedCategory,
+                contactsPM, contactsZGB);
+
+    }
+
+    public List<SolutionCategory> getAvailableSolutionCategories(long categoryId, long queueId) {
+        if (categoryId > 0)
+            return solutionCategoryDao.findByCategory(categoryId);
+        else
+            return new ArrayList<SolutionCategory>();
+    }
+
+    public List<ServiceDifference> getAvailableServiceDifferences() {
+    	List<ServiceDifference>  list = serviceDifferenceDao.findAll();
+    	log.info("ServiceDifference count "+list.size());
+    	if(list==null || list.size()==0) {
+    		list = serviceDifferenceDao.findAll();
+    		if(list==null || list.size()==0) {
+    			CanNotReproducedException e = new CanNotReproducedException("Keine Leistungsdifferenzierung gefunden");
+    			shell.showError("Keine Leistungsdifferenzierung gefunden", e);
+    		}
+    	}
+        return list;
+    }
+
+    public List<AbstractCategory> getAvailableCategories() {
+        return categoryDao.findAll();
+    }
+
+    @SuppressWarnings("unchecked")
+    private ArrayList<TreeItem> getBookingTree(String payload) {
+        SAXBuilder builder = new SAXBuilder();
+        ArrayList<TreeItem> bookingSet = new ArrayList<TreeItem>();
+
+        try {
+            int bookIndex = 0;
+            int serviceIndex = 0;
+
+            Document doc = (Document) builder.build(new StringReader(payload));
+            Element rootNode = (Element) doc.getRootElement();
+
+            for (Element bookingNode : (List<Element>) rootNode.getChildren()) {
+                if (rootNode.getChildren().size() == 1 && bookingNode.getChildren().size() < 1) {
+                    return null;
+                }
+                serviceIndex = 0;
+                TreeItem booking = new TreeItem(bookIndex, 0, "Booking / " + bookingNode.getAttributeValue("sys_Cd")
+                        + " - " + bookingNode.getAttributeValue("lead_pax"), TreeItemTyp.BOOKING);
+                for (Element serviceNode : (List<Element>) bookingNode.getChildren()) {
+                    booking.getSubGroups().add(
+                            new TreeItem(serviceIndex++, bookIndex, serviceNode.getAttributeValue("type"),
+                                    TreeItemTyp.SERVICE));
+                }
+                bookIndex++;
+                bookingSet.add(booking);
+            }
+        } catch (JDOMException e) {
+            log.error("Could not read data while reading booking tree", e);
+            sendErrorToShell("incidentDetails.loadErrorBookingTree");
+        } catch (IOException e) {
+            log.error("Could not read data while reading booking tree", e);
+            sendErrorToShell("incidentDetails.loadErrorBookingTree");
+        }
+
+        return bookingSet;
+    }
+
+    protected Incident loadIncident(long itemId) {
+        try {
+            return serviceFacade.getIncidentByUser(((User) taskmanagerApp.getUser()).getId(), itemId);
+        } catch (AccessDeniedException e) {
+            return incidentDao.retrieve(itemId);
+
+        }
+
+    }
+
+    public void lockIncident(Incident incident) throws IncidentLockException {
+        User user = (User) taskmanagerApp.getUser();
+
+        if (!incidentLockService.isLocked(user, incident)) {
+            incidentLockService.putLock(user, incident);
+            log.debug("incident {} -> would be locked", incident.getId());
+        }
+    }
+
+    @Override
+    public void loadSelectedService(int bookingIndex, int serviceIndex) {
+        try {
+        	User user = ((User) taskmanagerApp.getUser());
+        	String lastEditor = user.getFirstName() + " " + user.getLastName();
+            databusServiceQueue.doImport(incidentId, bookingSetNbr, bookingIndex, serviceIndex, lastEditor);
+            if (incidentId != 0) {
+                Incident incident = loadIncident(incidentId);
+                view.fillSubView(incident);
+            }
+        } catch (NullPointerException e) {
+            sendErrorToShell("incidentDetails.loadError");
+        }
+    }
+
+    public void sendErrorToShell(String messageKey) {
+        Exception e = new RuntimeException(); // just a placeholder as the API wants an Exception
+        String message=messageSource.getMessage(messageKey, null, Locale.getDefault());
+        shell.showError(message, e);
+    }
+
+    @Override
+    public void loadDataClicked(String bookingSetId) {
+        bookingSetNbr = bookingSetId;
+        try {
+            String prepareImportString = databusServiceQueue.prepareImport(bookingSetId);
+            List<TreeItem> bookingSetTree = getBookingTree(prepareImportString);
+            if (bookingSetTree == null) {
+                Object[] args = { bookingSetId };
+                view.showInfo("incidentDetails.noBookingSetFound", args);
+            } else {
+                view.loadBookingSetDialog(bookingSetTree, bookingSetId);
+            }
+        } catch (NullPointerException e) {
+            sendErrorToShell("incidentDetails.loadError");
+        }
+
+    }
+
+    @Override
+    public void updateIncident(Incident incident) {
+    	itemDetailsView.setItem(incident);
+    	view.updateContactDataAfterLoadBooking(incident);
+        if (threelcDao.existThreeLc(incident.getThreelc())) {
+            incidentDao.updateServiceData(incident.getId(), incident.getStartService(), incident.getEndService(),
+                    incident.getStartBooking(), incident.getEndBooking(), incident.getKindOfService(),
+                    incident.isMainService(), incident.getServiceKey(), incident.getServiceDetails(),
+                    incident.getThreelc(), incident.getAgencyId(),
+                    ((User) taskmanagerApp.getUser()).getFirstName() + " " + ((User) taskmanagerApp.getUser()).getLastName());
+
+            if(incident.getAgencyId() != null && StringUtils.isNotEmpty(incident.getAgencyId()))
+            {
+                Incident updatedIncident = loadIncident(incident.getId());
+                view.getLeftPanelDetailView().fillAgencyInformation(updatedIncident);
+            }
+            view.showInfo("incidentDetails.theelcUpdate", null);
+        } else {
+
+            if (incident.getThreelc().length() == 0) {
+                view.showInfo("incidentDetails.theelcfailure.null", null);
+                return;
+            }
+            Object[] args = { incident.getThreelc() };
+            view.showInfo("incidentDetails.theelcfailure", args);
+        }
+    }
+
+    @Override
+    public void onCategorySelected(long categoryId) {
+        if (eventBus != null)
+            eventBus.fireEvent(new CategorySelectedEvent(categoryId));
+    }
+
+    @Override
+    public List<AbstractCategory> resolveToLevel(long categoryId) {
+        long level2Cat = categoryDao.resolveToLevel2Category(categoryId);
+        AbstractCategory category = (AbstractCategory) categoryDao.retrieve(level2Cat);
+        if (category == null) {
+            return categoryDao.findSubCategories(categoryId);
+        } else {
+            return categoryDao.findSubCategories(category.getParentId());
+        }
+    }
+
+    @Override
+    public List<AbstractCategory> getSubProcessForCategory(long catId) {
+        return categoryDao.findSubCategories(catId);
+    }
+
+    @Override
+    public List<AbstractCategory> getLevel1Categories() {
+        return categoryDao.findTopLevelCategories();
+    }
+
+    @Override
+    public void openProposedRecipient(long contactId) {
+        view.setContactId(contactId);
+        eventBus.fireEvent(new ContactSelectedEvent(contactId));
+    }
+
+    @Override
+    public List<Queue> getAllQueues() {
+        return queueDao.getAllQueues();
+    }
+
+    @Override
+    public Queue getQueue(long id) {
+        return queueDao.retrieve(id);
+    }
+
+    @Override
+    public void closePopup() {
+        view.getLeftPanelDetailView().removePopup();
+    }
+
+    @Override
+    public void setSelectedCategory(String value, Object categoryId) {
+        view.getRightPanelDetailView().setSelectedCategory(value, categoryId);
+        closeCategoryFilterPopup();
+    }
+
+    @Override
+    public void closeCategoryFilterPopup() {
+        view.getRightPanelDetailView().removePopup();
+    }
+
+    @Override
+    public void queueChange(long incidentId, long newQueueId) {
+
+        
+        Incident incident = incidentDao.retrieve(incidentId);
+
+        // History einträge Bearbeitung abbrechen, Queue Verlassen, Neue Queue betreten
+        historyDao.create(incidentId, ((User) taskmanagerApp.getUser()).getId(), incident.getQueueId(),
+                incident.getCategoryId(), incident.getServiceDifferenceId(), incident.getSlaState(),
+               incident.getStatus(), incident.getPriority(), incident.getSolutionCategoryId(),
+                incident.getCommunicationChannel(), HistoryAction.INCIDENT_SHELVE);
+        historyDao.create(incidentId, ((User) taskmanagerApp.getUser()).getId(), incident.getQueueId(),
+                incident.getCategoryId(), incident.getServiceDifferenceId(), incident.getSlaState(),
+                incident.getStatus(), incident.getPriority(), incident.getSolutionCategoryId(),
+                incident.getCommunicationChannel(), HistoryAction.QUEUE_LEAVE);
+        historyDao.create(incidentId, ((User) taskmanagerApp.getUser()).getId(), newQueueId, incident.getCategoryId(),
+                incident.getServiceDifferenceId(), incident.getSlaState(),  incident.getStatus(),
+                incident.getPriority(), incident.getSolutionCategoryId(), incident.getCommunicationChannel(),
+                HistoryAction.QUEUE_CHANGE);
+        
+        incidentDao.updateQueue(incidentId, newQueueId, ((User) taskmanagerApp.getUser()).getFirstName() + " " + ((User) taskmanagerApp.getUser()).getLastName());
+        incidentLockService.freeLockByIncident(incident);
+        placeController.goTo(new ItemListPlace(Actions.LIST, newQueueId));
+
+    }
+
+    @Override
+    public boolean canChangeQueue() {
+        return serviceFacade.hasPermission(((User) taskmanagerApp.getUser()).getId(), Permission.CAN_CHANGE_QUEUE);
+    }
+}

@@ -1,0 +1,103 @@
+package com.inubit.tui.taskmanager.app.itemlist.place;
+
+import org.apache.commons.lang.builder.ToStringBuilder;
+
+import com.inubit.gui.vaadin.mvp.place.Place;
+import com.inubit.gui.vaadin.mvp.place.PlaceTokenizer;
+import com.inubit.gui.vaadin.mvp.place.Prefix;
+import com.inubit.tui.taskmanager.app.workbench.activity.WorkbenchMVPSubContainer.Actions;
+import com.inubit.tui.taskmanager.app.workbench.place.WorkbenchPlace;
+
+/**
+ * A sub-place of {@link WorkbenchPlace} if an item got selected.
+ */
+@Prefix("item-selected")
+public class ItemListPlace extends Place {
+
+	/**
+	 * Tokenizer for ItemSelectedPlace.
+	 * 
+	 */
+	public static class Tokenizer implements PlaceTokenizer<ItemListPlace> {
+
+		@Override
+		public ItemListPlace getPlace(String token) {
+			String[] splitedToken = token.split(":");
+			Actions action = Actions.valueOf(splitedToken[0]);
+			Long queueId = Long.parseLong(splitedToken[1]);
+			String searchTerm = splitedToken.length > 2 ? splitedToken[2] : "";
+			return new ItemListPlace(action, queueId, searchTerm);
+		}
+
+		@Override
+		public String getToken(ItemListPlace place) {
+			return place.getAction().toString() + ":" + place.getItemId() + ":"
+					+ place.getSearchTerm();
+		}
+	}
+
+	private long itemId;
+	private String searchTerm;
+	private Actions action;
+
+	public ItemListPlace(Actions action, final long itemId) {
+		this.action = action;
+		this.itemId = itemId;
+		this.searchTerm = "";
+	}
+
+	public ItemListPlace(Actions action, final long itemId,
+			String searchTerm) {
+		this.action = action;
+		this.itemId = itemId;
+		this.searchTerm = searchTerm;
+	}
+
+	public long getItemId() {
+		return itemId;
+	}
+
+	@Override
+	public String toString() {
+		return ToStringBuilder.reflectionToString(this);
+	}
+
+	@Override
+	public int hashCode() {
+		return new Long(itemId).hashCode() + action.hashCode();
+	}
+
+	@Override
+	public boolean equals(Object obj) {
+		if (this == obj) {
+			return true;
+		}
+		if (obj == null) {
+			return false;
+		}
+		if (getClass() != obj.getClass()) {
+			return false;
+		}
+		ItemListPlace other = (ItemListPlace) obj;
+		return other.itemId == this.itemId
+				&& other.getAction().ordinal() == this.getAction().ordinal()
+				&& other.searchTerm.equals(this.getSearchTerm());
+	}
+
+	public Actions getAction() {
+		return action;
+	}
+
+	public void setAction(Actions action) {
+		this.action = action;
+	}
+
+	public String getSearchTerm() {
+		return searchTerm;
+	}
+
+	public void setSearchTerm(String searchTerm) {
+		this.searchTerm = searchTerm;
+	}
+
+}

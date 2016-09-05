@@ -1,0 +1,281 @@
+package com.inubit.tui.taskmanager.app.itemlist.activity;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import net.anotheria.moskito.aop.annotation.Monitor;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationContext;
+
+import com.inubit.gui.vaadin.mvp.activity.AbstractActivity;
+import com.inubit.gui.vaadin.mvp.event.EventBus;
+import com.inubit.gui.vaadin.mvp.event.HandlerRegistration;
+import com.inubit.gui.vaadin.mvp.place.PlaceController;
+import com.inubit.gui.vaadin.mvp.shell.Shell;
+import com.inubit.gui.vaadin.mvp.view.ViewPort;
+import com.inubit.tui.taskmanager.app.TaskManagerApplication;
+import com.inubit.tui.taskmanager.app.details.event.CategorySelectedEvent;
+import com.inubit.tui.taskmanager.app.itemlist.place.ItemListPlace;
+import com.inubit.tui.taskmanager.app.itemlist.view.ItemListView;
+import com.inubit.tui.taskmanager.app.workbench.activity.WorkbenchMVPSubContainer.Actions;
+import com.inubit.tui.taskmanager.event.FreeScreenEvent;
+import com.inubit.tui.taskmanager.event.LockChangeEvent;
+import com.inubit.tui.taskmanager.persistence.dao.CategoryDao;
+import com.inubit.tui.taskmanager.persistence.dao.HistoryEntryDao;
+import com.inubit.tui.taskmanager.persistence.dao.IncidentDao;
+import com.inubit.tui.taskmanager.persistence.dao.ServiceDifferenceDao;
+import com.inubit.tui.taskmanager.persistence.dao.SolutionCategoryDao;
+import com.inubit.tui.taskmanager.persistence.domain.CommunicationChannel;
+import com.inubit.tui.taskmanager.persistence.domain.HistoryAction;
+import com.inubit.tui.taskmanager.persistence.domain.Incident;
+import com.inubit.tui.taskmanager.persistence.domain.Incident.Status;
+import com.inubit.tui.taskmanager.persistence.domain.Queue;
+import com.inubit.tui.taskmanager.persistence.domain.SLAState;
+import com.inubit.tui.taskmanager.persistence.domain.SolutionCategory;
+import com.inubit.tui.taskmanager.persistence.domain.category.AbstractCategory;
+import com.inubit.tui.taskmanager.persistence.dto.SearchFilter;
+import com.inubit.tui.taskmanager.persistence.dto.SearchParameter;
+import com.inubit.tui.taskmanager.security.domain.User;
+import com.inubit.tui.taskmanager.security.exceptions.AccessDeniedException;
+import com.inubit.tui.taskmanager.service.ServiceFacade;
+
+@Monitor
+public class ItemListActivity extends AbstractActivity implements ItemListView.Presenter {
+
+	private static final Logger log = LoggerFactory.getLogger(ItemListActivity.class);
+	private ItemListView view;
+	private PlaceController placeController;
+	private Shell shell;
+	private IncidentDao incidentDao;
+	private HistoryEntryDao historyEntryDao;
+	private CategoryDao categoryDao;
+	private ServiceDifferenceDao serviceDifferenceDao;
+	private SolutionCategoryDao solutionCategoryDao;
+	private final ServiceFacade serviceFacade;
+	private TaskManagerApplication app;
+	private EventBus eventBus;
+	private HandlerRegistration lockReg;
+
+	public ItemListActivity(ApplicationContext ctx) {
+		this.incidentDao = ctx.getBean(IncidentDao.class);
+		this.categoryDao = ctx.getBean(CategoryDao.class);
+		this.serviceDifferenceDao = ctx.getBean(ServiceDifferenceDao.class);
+		this.solutionCategoryDao = ctx.getBean(SolutionCategoryDao.class);
+		this.historyEntryDao = ctx.getBean(HistoryEntryDao.class);
+		this.placeController = ctx.getBean(PlaceController.class);
+		this.view = ctx.getBean(ItemListView.class);
+		this.serviceFacade = ctx.getBean(ServiceFacade.class);
+		this.shell = ctx.getBean(Shell.class);
+		this.app = ctx.getBean(TaskManagerApplication.class);
+		view.setPresenter(this);
+		view.setShell(shell);
+		if (view.isQueueError())
+			sendErrorToShell("No Queue available", new RuntimeException());
+
+	}
+
+	@Override
+	public void start(ViewPort viewPort, EventBus eventBus) {
+	    this.eventBus = eventBus;
+		viewPort.setView(view);
+		ItemListPlace place = ((ItemListPlace) placeController.getWhere());
+		onItemSelection(place.getAction(), place.getItemId());
+
+		lockReg  = app.getCentralEventBus().addHandler(LockChangeEvent.class, new LockChangeEvent.Handler() {
+
+			@Override
+			public void unlocked(Incident incident, Queue queue, User user) { 
+				// // zeige wieder freigegeben an
+				if(view.pushUnlockIncidentChange(incident, queue)) {
+				    app.getPusher().push();
+				}
+			}
+
+			@Override
+			public void locked(Incident incident, Queue queue, User user) {
+				// // zeige gesperrt an
+				// //placeController.goTo(new ItemListPlace(Actions.SHOW,
+				// incidentId));
+				if(view.pushLockIncidentChange(incident, queue)) {
+				    app.getPusher().push();
+				}
+			}
+		});
+	}
+			
+			@Override
+	public void onStop() {
+		lockReg.removeHandler();
+		super.onStop();
+	}
+
+	public void freezeScreen(final long incidentId, final String userId) {
+		app.getCentralEventBus().fireEvent(new FreeScreenEvent(incidentId, userId));
+	}
+
+
+	@Override
+	public void onItemSelection(Actions action, long itemId) {
+		Incident incident;
+		switch (action) {
+
+		case SHOW:
+			incident = incidentDao.retrieve(itemId);
+			historyEntryDao.create(itemId, ((User) app.getUser()).getId(), incident.getQueueId(), incident.getCategoryId(),
+					incident.getServiceDifferenceId(), incident.getSlaState(), Status.INPROCESS, incident.getPriority(),
+					incident.getSolutionCategoryId(), incident.getCommunicationChannel(), HistoryAction.INCIDENT_INPROCESS);
+			placeController.goTo(new ItemListPlace(action, itemId));
+			break;
+		case CREATE:
+			long incidentId = createNewIncident(itemId);
+			incident = incidentDao.retrieve(incidentId);
+			historyEntryDao.create(incidentId, ((User) app.getUser()).getId(), incident.getQueueId(), incident.getCategoryId(),
+					incident.getServiceDifferenceId(), incident.getSlaState(), Status.NEW, incident.getPriority(),
+					incident.getSolutionCategoryId(), incident.getCommunicationChannel(), HistoryAction.INCIDENT_CREATE);
+			historyEntryDao.create(incidentId, ((User) app.getUser()).getId(), incident.getQueueId(), incident.getCategoryId(),
+					incident.getServiceDifferenceId(), incident.getSlaState(), Status.INPROCESS, incident.getPriority(),
+					incident.getSolutionCategoryId(), incident.getCommunicationChannel(), HistoryAction.INCIDENT_INPROCESS);
+			placeController.goTo(new ItemListPlace(action, incidentId));
+			break;
+		default:
+
+			placeController.goTo(new ItemListPlace(action, itemId));
+			break;
+		}
+	}
+
+	private long createNewIncident(long queueId) {
+		long incidentId = incidentDao.create(queueId, 0l, 0l, 0l, "", Status.NEW, CommunicationChannel.CALL, (short) 0, (short) 0, SLAState.GREEN,
+				"", null, null, null, null, "", "", "", "", "", "", false, "", "", "", "", 
+				((User) app.getUser()).getFirstName() + " " + ((User) app.getUser()).getLastName());
+		incidentDao.updateOldStatus(incidentId, Status.NEW, ((User) app.getUser()).getFirstName() + " " + ((User) app.getUser()).getLastName());
+		return incidentId;
+	}
+
+	@Override
+	public void onSearchStart(SearchParameter searchParameter) {
+		view.detailSearch(searchParameter);
+	}
+
+	@Override
+	public void onItemSelection(Actions action, long itemId, String searchTerm) {
+		placeController.goTo(new ItemListPlace(action, itemId, searchTerm));
+	}
+
+	public void update(final ItemListPlace place) {
+		User user = (User) app.getUser();
+		Long lockedUserId = app.getIncidentLockService().userHasLocked(user);
+		view.updateIncidentLockInformation(lockedUserId);
+		try {
+			if (serviceFacade.getVisibleQueue(user.getId(), place.getItemId()) != null) {
+				view.updateQueue(place.getItemId());
+			}
+		} catch (AccessDeniedException e) {
+			view.updateQueue(serviceFacade.getFirstVisibleQueueId(user.getId()));
+		}
+	}
+
+	public void updateSearch(ItemListPlace place) {
+
+	}
+
+	public void updateVolltextSearch(ItemListPlace place) {
+		view.startVolltextSearch(place.getSearchTerm());
+	}
+
+	public void sendErrorToShell(String message, Exception e) {
+		shell.showError(message, e);
+	}
+
+	@Override
+	public void setData() {
+		view.setDataForGlobalSearchView(serviceDifferenceDao.findAll(), solutionCategoryDao.findAll());
+	}
+
+	@Override
+	public List<AbstractCategory> getSubProcessForCategory(long catId) {
+		return categoryDao.findSubCategories(catId);
+	}
+
+	@Override
+	public List<AbstractCategory> getLevel1Categories() {
+		return categoryDao.findTopLevelCategories();
+	}
+
+	@Override
+	public void closeResultFilterPopup() {
+		view.removePopup();
+	}
+
+	@Override
+	public void filterResults(SearchFilter searchFilterParameter) {
+	    assert searchFilterParameter != null;
+		view.filterData(searchFilterParameter);
+		closeResultFilterPopup();
+	}
+
+	@Override
+    public List<AbstractCategory> resolveToLevel(long categoryId) {
+        long level2Cat = categoryDao.resolveToLevel2Category(categoryId);
+        AbstractCategory category = (AbstractCategory) categoryDao.retrieve(level2Cat);
+        if (category == null) {
+            return categoryDao.findSubCategories(categoryId);
+        } else {
+            return categoryDao.findSubCategories(category.getParentId());
+        }
+    }
+	
+	@Override
+    public void setSelectedCategory(String value, Object categoryId, boolean isDetailSearch) {
+        if(isDetailSearch)
+        {
+    	    view.getGlobalSearchView().setSelectedCategory(value, categoryId);
+            closeCategoryFilterPopup(isDetailSearch);
+        } else {
+            view.getFilterPopup().setSelectedCategory(value, categoryId);
+            closeCategoryFilterPopup(isDetailSearch);
+        }
+    }
+	
+	@Override
+    public void closeCategoryFilterPopup(boolean isDetailSearch) {
+	    if(isDetailSearch)
+	    {
+	        view.getGlobalSearchView().removePopup();
+	    } else {
+	        view.getFilterPopup().removePopup();
+	    }
+    }
+	
+	@Override
+	public List<SolutionCategory> getAvailableSolutionCategories(long categoryId, long queueId) {
+        if (categoryId > 0)
+            return solutionCategoryDao.findByCategory(categoryId);
+        else
+            return new ArrayList<SolutionCategory>();
+    }
+	
+	@Override
+	public Status resetStatus(long itemId) {
+		Incident incident = incidentDao.retrieve(itemId);
+		incidentDao.updateStatus(itemId, incident.getOldStatus());
+		return incident.getOldStatus();
+	}
+
+	@Override
+    public void onCategorySelected(long categoryId) {
+//        if (eventBus != null)
+//            eventBus.fireEvent(new CategorySelectedEvent(categoryId));
+    }
+	
+	/**
+	 * Checks if actual Place is one of Actions.List
+	 */
+	@Override
+	public boolean isQueryList() {
+		return ((ItemListPlace) placeController.getWhere()).getAction().equals(Actions.LIST);
+	}
+	
+}

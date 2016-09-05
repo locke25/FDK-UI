@@ -1,0 +1,112 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <parent>
+    <artifactId>fdk-project</artifactId>
+    <groupId>com.jcim.fdk</groupId>
+    <version>0.1.0-SNAPSHOT</version>
+    <relativePath>..</relativePath>
+  </parent>
+  <artifactId>fdk-widgetset</artifactId>
+  <name>fdk-widgetset</name>
+
+  <description>Takes care of all gwt compilation for client side widgets.</description>
+
+  <properties>
+		<vaadin.version>7.6.5</vaadin.version>
+		<vaadin.plugin.version>${vaadin.version}</vaadin.plugin.version>
+	</properties>
+  
+  <dependencies>
+    <!--<dependency>
+      <groupId>com.google.gwt</groupId>
+      <artifactId>gwt-user</artifactId>
+      <scope>provided</scope>
+    </dependency>-->
+    <!--  <dependency>
+      <groupId>com.vaadin</groupId>
+      <artifactId>vaadin</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.vaadin.addons</groupId>
+      <artifactId>confirmdialog</artifactId>
+    </dependency>-->
+    <dependency>
+			<groupId>com.vaadin</groupId>
+			<artifactId>vaadin-server</artifactId>
+			<version>${vaadin.version}</version>
+		</dependency>
+		<dependency>
+			<groupId>com.vaadin</groupId>
+			<artifactId>vaadin-client-compiled</artifactId>
+			<version>${vaadin.version}</version>
+		</dependency>
+		<dependency>
+			<groupId>com.vaadin</groupId>
+			<artifactId>vaadin-client</artifactId>
+			<version>${vaadin.version}</version>
+			<scope>provided</scope>
+		</dependency>
+		<dependency>
+			<groupId>com.vaadin</groupId>
+			<artifactId>vaadin-themes</artifactId>
+			<version>${vaadin.version}</version>
+		</dependency>
+    <!-- validation-api dep is needed by GWT 2.3.0 during gwt compilation -->
+   <!--  <dependency>
+      <groupId>javax.validation</groupId>
+      <artifactId>validation-api</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>javax.servlet</groupId>
+      <artifactId>servlet-api</artifactId>
+      <version>3.1.0</version>
+      <scope>provided</scope>
+    </dependency> -->
+  </dependencies>
+  
+  <build>
+    <plugins>
+      <!-- Compile custom GWT components or widget dependencies with the GWT compiler -->
+      <!-- <plugin>
+        <groupId>org.codehaus.mojo</groupId>
+        <artifactId>gwt-maven-plugin</artifactId>
+        <version>2.3.0-1</version>
+        <configuration>
+          <compileSourcesArtifacts>
+            <compileSourcesArtifact>javax.validation:validation-api</compileSourcesArtifact>
+          </compileSourcesArtifacts>
+          put the created resources on the classpath
+          <webappDirectory>target/classes/VAADIN/widgetsets</webappDirectory>
+          the target/classes directory is cleaned regularly. You can use mvn gwt:compile -Dgwt.inplace to store the output in the resource folder
+          <warSourceDirectory>src/main/resources/VAADIN/widgetsets</warSourceDirectory>
+          this is not a webapp
+          <noServer>true</noServer>
+          <module>com.inubit.pa.parsp.widgetset.TaskManagerWidgetset</module>
+          <draftCompile>true</draftCompile>
+          <style>PRETTY</style>
+          <runTarget>tm</runTarget>
+        </configuration>
+        <executions>
+          <execution>
+          	<goals>
+          		<goal>compile</goal>
+          	</goals>
+          </execution>
+        </executions>
+        Tell what GWT version to use
+        <dependencies>
+          <dependency>
+            <groupId>com.google.gwt</groupId>
+            <artifactId>gwt-user</artifactId>
+            <version>2.4.0</version>
+          </dependency>
+          <dependency>
+            <groupId>com.google.gwt</groupId>
+            <artifactId>gwt-dev</artifactId>
+            <version>2.4.0</version>
+          </dependency>
+        </dependencies>
+      </plugin> -->
+    </plugins>
+  </build>
+</project>

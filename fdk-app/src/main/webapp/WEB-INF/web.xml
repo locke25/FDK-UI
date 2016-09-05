@@ -1,0 +1,202 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<web-app id="WebApp_ID" version="2.4"
+	xmlns="http://java.sun.com/xml/ns/j2ee" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://java.sun.com/xml/ns/j2ee http://java.sun.com/xml/ns/j2ee/web-app_2_4.xsd">
+	<display-name>TaskManager</display-name>
+	<context-param>
+		<description>
+		Vaadin production mode</description>
+		<param-name>productionMode</param-name>
+		<param-value>false</param-value>
+	</context-param>
+
+ 	
+	  <filter> 
+	 	 <filter-name>MoskitoUIFilter</filter-name> 
+	 	 <filter-class>net.anotheria.moskito.webui.MoskitoUIFilter</filter-class>	 	 
+	 	 <!-- <async-supported>true</async-supported>  -->	 	 
+		<init-param> 
+			<param-name>path</param-name> 
+			<param-value>/mui/</param-value>			
+		</init-param>
+	 </filter>
+	 	
+	<filter> 
+		<filter-name>RequestURIFilter</filter-name> 
+		<filter-class>net.anotheria.moskito.web.filters.RequestURIFilter</filter-class>
+		<!-- <async-supported>true</async-supported>  --> 
+		<init-param> 
+			<param-name>limit</param-name> 
+			<param-value>1500</param-value> 
+		</init-param> 
+	</filter>
+	  		
+	<filter>
+		<filter-name>MoskitoCommandFilter</filter-name>
+		<filter-class>net.anotheria.moskito.web.filters.MoskitoCommandFilter</filter-class>
+		<!-- <async-supported>true</async-supported>  -->
+	</filter>  			
+		  
+	<filter>
+		<filter-name>JourneyFilter</filter-name>
+		<filter-class>net.anotheria.moskito.web.filters.JourneyFilter</filter-class>
+		<!--   <async-supported>true</async-supported> -->
+	</filter> 
+	  			
+	<filter-mapping><filter-name>RequestURIFilter</filter-name> <url-pattern>/*</url-pattern></filter-mapping> 
+	<filter-mapping><filter-name>MoskitoCommandFilter</filter-name><url-pattern>/*</url-pattern></filter-mapping>	  
+	<filter-mapping><filter-name>JourneyFilter</filter-name><url-pattern>/*</url-pattern></filter-mapping>    	
+	<filter-mapping><filter-name>MoskitoUIFilter</filter-name><url-pattern>/mui/*</url-pattern></filter-mapping>	 
+			
+	<listener><listener-class>net.anotheria.moskito.webui.util.StartStopListener</listener-class></listener> 			
+	<listener><listener-class> net.anotheria.moskito.web.session.SessionCountProducer</listener-class></listener> 			
+	<listener><listener-class> net.anotheria.moskito.webui.util.SetupPreconfiguredAccumulators</listener-class></listener>
+	 
+	
+	<!-- 
+	TAKEN FROM TUI POJECT
+	@see LCAG-210
+	 -->
+	<!-- Configure ContextLoaderListener to use JavaConfigWebApplicationContext 
+		 instead of the default XmlWebApplicationContext -->
+	<context-param>
+		<param-name>contextClass</param-name>
+		<param-value>
+			org.springframework.web.context.support.AnnotationConfigWebApplicationContext
+		</param-value>
+	</context-param>
+	<!-- Configuration locations must consist of one or more comma- or space-delimited 
+		 fully-qualified @Configuration classes -->
+	<context-param>
+		<param-name>contextConfigLocation</param-name>
+		<param-value>
+			com.jcim.fdk.config.RootApplicationConfig
+		</param-value>
+	</context-param>		
+	
+	<listener>
+		<listener-class>
+	    	org.springframework.web.context.ContextLoaderListener
+	  	</listener-class>
+	</listener>
+	
+	<!-- END: TAKEN FROM TUI POJECT -->
+	
+	<servlet>
+		<servlet-name>TaskManager</servlet-name>
+		<servlet-class>com.vaadin.server.VaadinServlet</servlet-class>
+		<init-param>
+			<description>
+			Vaadin application class to start</description>
+			<param-name>UI</param-name>
+			<param-value>com.jcim.fdk.WfsUI</param-value>
+		</init-param>
+	</servlet>
+	<servlet>
+		<servlet-name>VaadinClasspathResourcesSpool</servlet-name>
+		<servlet-class>com.inubit.gui.vaadin.mvp.util.servlets.ClasspathSpool</servlet-class>
+		<init-param>
+			<param-name>resourcesRoot</param-name>
+			<param-value>/VAADIN</param-value>
+		</init-param>
+	</servlet>
+	<servlet-mapping>
+		<servlet-name>VaadinClasspathResourcesSpool</servlet-name>
+		<url-pattern>/VAADIN/*</url-pattern>
+	</servlet-mapping>
+	<servlet-mapping>
+		<servlet-name>TaskManager</servlet-name>
+		<url-pattern>/fdk-app/*</url-pattern>
+	</servlet-mapping>
+	<!-- <context-param>
+	  <param-name>contextClass</param-name>
+	  <param-value>
+	    org.springframework.web.context.support.AnnotationConfigWebApplicationContext
+	  </param-value>
+	</context-param>
+	
+	<context-param>
+	  <param-name>contextConfigLocation</param-name>
+	  <param-value>com.inubit.lcag.wfs.config.AppConfig</param-value>
+	</context-param>
+	-->
+	
+	<!-- Moskito JSP Mapping, due to /* to spring servlet the jsps have to 
+			be mapped by fully qualified name to ensure the jsp servlet working properly -->
+
+	 	<!--  			
+			<servlet-mapping> <servlet-name>jsp</servlet-name> <url-pattern>/net/anotheria/moskito/webui/accumulators/jsp/AccumulatorsJSON.jsp</url-pattern>
+			</servlet-mapping> <servlet-mapping> <servlet-name>jsp</servlet-name> <url-pattern>/net/anotheria/moskito/webui/accumulators/jsp/AccumulatorsCSV.jsp</url-pattern> 
+			</servlet-mapping> <servlet-mapping> <servlet-name>jsp</servlet-name> <url-pattern>/net/anotheria/moskito/webui/accumulators/jsp/AccumulatorJSON.jsp</url-pattern>
+			</servlet-mapping> <servlet-mapping> <servlet-name>jsp</servlet-name> <url-pattern>/net/anotheria/moskito/webui/accumulators/jsp/AccumulatorCSV.jsp</url-pattern> 
+			</servlet-mapping> <servlet-mapping> <servlet-name>jsp</servlet-name> <url-pattern>/net/anotheria/moskito/webui/accumulators/jsp/Accumulators.jsp</url-pattern> 
+			</servlet-mapping> <servlet-mapping> <servlet-name>jsp</servlet-name> <url-pattern>/net/anotheria/moskito/webui/accumulators/jsp/Accumulator.jsp</url-pattern>			
+			</servlet-mapping>
+			
+			<servlet-mapping> <servlet-name>jsp</servlet-name> <url-pattern>/net/anotheria/moskito/webui/charts/jsp/ChartData.jsp</url-pattern>
+			</servlet-mapping> <servlet-mapping> <servlet-name>jsp</servlet-name> <url-pattern>/net/anotheria/moskito/webui/charts/jsp/ChartDataCSV.jsp</url-pattern>
+			</servlet-mapping> <servlet-mapping> <servlet-name>jsp</servlet-name> <url-pattern>/net/anotheria/moskito/webui/charts/jsp/ChartMetaDataCSV.jsp</url-pattern> 
+			</servlet-mapping> <servlet-mapping> <servlet-name>jsp</servlet-name> <url-pattern>/net/anotheria/moskito/webui/charts/jsp/ChartMetaDataXML.jsp</url-pattern>
+			</servlet-mapping> <servlet-mapping> <servlet-name>jsp</servlet-name> <url-pattern>/net/anotheria/moskito/webui/charts/jsp/ChartDataJSON.jsp</url-pattern> 
+			</servlet-mapping> <servlet-mapping> <servlet-name>jsp</servlet-name> <url-pattern>/net/anotheria/moskito/webui/charts/jsp/Charts.jsp</url-pattern> 
+			</servlet-mapping> <servlet-mapping> <servlet-name>jsp</servlet-name> <url-pattern>/net/anotheria/moskito/webui/charts/jsp/ChartMetaData.jsp</url-pattern> 
+			</servlet-mapping> <servlet-mapping> <servlet-name>jsp</servlet-name> <url-pattern>/net/anotheria/moskito/webui/charts/jsp/ChartMetaDataJSON.jsp</url-pattern> 
+			</servlet-mapping> <servlet-mapping> <servlet-name>jsp</servlet-name> <url-pattern>/net/anotheria/moskito/webui/charts/jsp/ChartDataXML.jsp</url-pattern> 
+			</servlet-mapping>
+			
+			<servlet-mapping> <servlet-name>jsp</servlet-name> <url-pattern>/net/anotheria/moskito/webui/journey/jsp/AnalyzeJourney.jsp</url-pattern>
+			</servlet-mapping> <servlet-mapping> <servlet-name>jsp</servlet-name> <url-pattern>/net/anotheria/moskito/webui/journey/jsp/Journeys.jsp</url-pattern> 
+			</servlet-mapping> <servlet-mapping> <servlet-name>jsp</servlet-name> <url-pattern>/net/anotheria/moskito/webui/journey/jsp/Journey.jsp</url-pattern> 
+			</servlet-mapping> <servlet-mapping> <servlet-name>jsp</servlet-name> <url-pattern>/net/anotheria/moskito/webui/journey/jsp/JourneyCall.jsp</url-pattern>
+			</servlet-mapping>
+			
+			<servlet-mapping><servlet-name>jsp</servlet-name> <url-pattern>/net/anotheria/moskito/webui/more/jsp/AdditionalItems.jsp</url-pattern>
+			</servlet-mapping><servlet-mapping><servlet-name>jsp</servlet-name> <url-pattern>/net/anotheria/moskito/webui/more/jsp/Config.jsp</url-pattern>
+			</servlet-mapping><servlet-mapping><servlet-name>jsp</servlet-name> <url-pattern>/net/anotheria/moskito/webui/more/jsp/Libs.jsp</url-pattern>
+			</servlet-mapping><servlet-mapping><servlet-name>jsp</servlet-name> <url-pattern>/net/anotheria/moskito/webui/more/jsp/MBeans.jsp</url-pattern>
+			</servlet-mapping><servlet-mapping><servlet-name>jsp</servlet-name> <url-pattern>/net/anotheria/moskito/webui/more/jsp/Plugins.jsp</url-pattern>
+			</servlet-mapping><servlet-mapping><servlet-name>jsp</servlet-name> <url-pattern>/net/anotheria/moskito/webui/more/jsp/Update.jsp</url-pattern>
+			</servlet-mapping>
+			
+			<servlet-mapping> <servlet-name>jsp</servlet-name> <url-pattern>/net/anotheria/moskito/webui/producers/jsp/CategorySelection.jsp</url-pattern>
+			</servlet-mapping> <servlet-mapping> <servlet-name>jsp</servlet-name> <url-pattern>/net/anotheria/moskito/webui/producers/jsp/InspectProducer.jsp</url-pattern> 
+			</servlet-mapping> <servlet-mapping> <servlet-name>jsp</servlet-name> <url-pattern>/net/anotheria/moskito/webui/producers/jsp/IntervalSelection.jsp</url-pattern> 
+			</servlet-mapping> <servlet-mapping> <servlet-name>jsp</servlet-name> <url-pattern>/net/anotheria/moskito/webui/producers/jsp/Producer.jsp</url-pattern> 
+			</servlet-mapping> <servlet-mapping> <servlet-name>jsp</servlet-name> <url-pattern>/net/anotheria/moskito/webui/producers/jsp/ProducerCSV.jsp</url-pattern>
+			</servlet-mapping> <servlet-mapping> <servlet-name>jsp</servlet-name> <url-pattern>/net/anotheria/moskito/webui/producers/jsp/ProducerForSelection.jsp</url-pattern>
+			</servlet-mapping> <servlet-mapping> <servlet-name>jsp</servlet-name> <url-pattern>/net/anotheria/moskito/webui/producers/jsp/Producers.jsp</url-pattern> 
+			</servlet-mapping> <servlet-mapping> <servlet-name>jsp</servlet-name> <url-pattern>/net/anotheria/moskito/webui/producers/jsp/ProducersCSV.jsp</url-pattern>
+			</servlet-mapping><servlet-mapping><servlet-name>jsp</servlet-name><url-pattern>/net/anotheria/moskito/webui/producers/jsp/ProducersJSON.jsp</url-pattern>
+			</servlet-mapping> <servlet-mapping> <servlet-name>jsp</servlet-name> <url-pattern>/net/anotheria/moskito/webui/producers/jsp/ProducersMainMenu.jsp</url-pattern>
+			</servlet-mapping> <servlet-mapping> <servlet-name>jsp</servlet-name> <url-pattern>/net/anotheria/moskito/webui/producers/jsp/ProducerXML.jsp</url-pattern> 
+			</servlet-mapping> <servlet-mapping> <servlet-name>jsp</servlet-name> <url-pattern>/net/anotheria/moskito/webui/producers/jsp/ProducersXML.jsp</url-pattern>
+			</servlet-mapping> <servlet-mapping> <servlet-name>jsp</servlet-name> <url-pattern>/net/anotheria/moskito/webui/producers/jsp/SubsystemSelection.jsp</url-pattern>
+			</servlet-mapping> <servlet-mapping> <servlet-name>jsp</servlet-name> <url-pattern>/net/anotheria/moskito/webui/producers/jsp/UnitSelection.jsp</url-pattern>			
+			</servlet-mapping>
+			
+			<servlet-mapping> <servlet-name>jsp</servlet-name> <url-pattern>/net/anotheria/moskito/webui/shared/jsp/AutoreloadMenu.jsp</url-pattern>
+			</servlet-mapping><servlet-mapping> <servlet-name>jsp</servlet-name> <url-pattern>/net/anotheria/moskito/webui/shared/jsp/ConfigView.jsp</url-pattern>
+			</servlet-mapping> <servlet-mapping> <servlet-name>jsp</servlet-name> <url-pattern>/net/anotheria/moskito/webui/shared/jsp/CSS.jsp</url-pattern>
+			</servlet-mapping> <servlet-mapping> <servlet-name>jsp</servlet-name> <url-pattern>/net/anotheria/moskito/webui/shared/jsp/Error.jsp</url-pattern>
+			</servlet-mapping> <servlet-mapping> <servlet-name>jsp</servlet-name> <url-pattern>/net/anotheria/moskito/webui/shared/jsp/Explanations.jsp</url-pattern>
+			</servlet-mapping> <servlet-mapping> <servlet-name>jsp</servlet-name> <url-pattern>/net/anotheria/moskito/webui/shared/jsp/ExportMenu.jsp</url-pattern>
+			</servlet-mapping> <servlet-mapping> <servlet-name>jsp</servlet-name> <url-pattern>/net/anotheria/moskito/webui/shared/jsp/Footer.jsp</url-pattern>
+			</servlet-mapping> <servlet-mapping><servlet-name>jsp</servlet-name><url-pattern>/net/anotheria/moskito/webui/shared/jsp/Menu.jsp</url-pattern>
+			</servlet-mapping> <servlet-mapping> <servlet-name>jsp</servlet-name> <url-pattern>/net/anotheria/moskito/webui/shared/jsp/MonitoringSessionMainMenu.jsp</url-pattern>
+			</servlet-mapping> <servlet-mapping> <servlet-name>jsp</servlet-name> <url-pattern>/net/anotheria/moskito/webui/shared/jsp/RecordedUseCase.jsp</url-pattern>
+			</servlet-mapping> <servlet-mapping> <servlet-name>jsp</servlet-name> <url-pattern>/net/anotheria/moskito/webui/shared/jsp/TreeNode.jsp</url-pattern> 
+			</servlet-mapping> <servlet-mapping> <servlet-name>jsp</servlet-name> <url-pattern>/net/anotheria/moskito/webui/shared/jsp/UseCases.jsp</url-pattern>			
+			</servlet-mapping> 
+			
+			<servlet-mapping> <servlet-name>jsp</servlet-name> <url-pattern>/net/anotheria/moskito/webui/threads/jsp/Threads.jsp</url-pattern>
+			</servlet-mapping> <servlet-mapping> <servlet-name>jsp</servlet-name> <url-pattern>/net/anotheria/moskito/webui/threads/jsp/ThreadsDump.jsp</url-pattern>
+			</servlet-mapping> <servlet-mapping> <servlet-name>jsp</servlet-name> <url-pattern>/net/anotheria/moskito/webui/threads/jsp/ThreadsHistory.jsp</url-pattern>
+			</servlet-mapping> <servlet-mapping> <servlet-name>jsp</servlet-name> <url-pattern>/net/anotheria/moskito/webui/threads/jsp/ThreadsList.jsp</url-pattern>			
+			</servlet-mapping>			
+									 
+			<servlet-mapping> <servlet-name>jsp</servlet-name> <url-pattern>/net/anotheria/moskito/webui/threshold/jsp/ThresholdsXML.jsp</url-pattern> 
+			</servlet-mapping> <servlet-mapping> <servlet-name>jsp</servlet-name> <url-pattern>/net/anotheria/moskito/webui/threshold/jsp/ThresholdsJSON.jsp</url-pattern>						
+			</servlet-mapping> <servlet-mapping> <servlet-name>jsp</servlet-name> <url-pattern>/net/anotheria/moskito/webui/threshold/jsp/Thresholds.jsp</url-pattern>
+			</servlet-mapping> <servlet-mapping> <servlet-name>jsp</servlet-name> <url-pattern>/net/anotheria/moskito/webui/threshold/jsp/EditThreshold.jsp</url-pattern>		
+			</servlet-mapping>	   -->
+</web-app>

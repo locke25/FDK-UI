@@ -1,0 +1,108 @@
+package com.jcim.fdk.itemdetails.place;
+
+import org.apache.commons.lang.builder.ToStringBuilder;
+
+import com.inubit.gui.vaadin.mvp.place.Place;
+import com.inubit.gui.vaadin.mvp.place.PlaceTokenizer;
+import com.inubit.gui.vaadin.mvp.place.Prefix;
+import com.jcim.fdk.navigation.place.NavigationPlace;
+import com.jcim.fdk.workbench.place.WorkbenchPlace;
+
+@Prefix("item-details")
+public class ItemDetailsPlace extends Place implements NavigationPlace {
+
+	public static enum Action {
+		SUBPLACE_ONE, SUBPLACE_TWO
+	}
+
+	/**
+	 * Tokenizer for ItemSelectedPlace.
+	 * 
+	 */
+	public static class Tokenizer implements PlaceTokenizer<ItemDetailsPlace> {
+
+		@Override
+		public ItemDetailsPlace getPlace(String token) {
+			String[] splitedToken = token.split(":");
+			return new ItemDetailsPlace(Action.valueOf(splitedToken[0]));
+
+		}
+
+		@Override
+		public String getToken(ItemDetailsPlace place) {
+			return place.getAction().name();
+		}
+	}
+
+	private Action action;
+	private long itemId;	
+
+	public long getItemId() {
+		return itemId;
+	}
+
+	public void setItemId(long itemId) {
+		this.itemId = itemId;
+	}
+
+	public ItemDetailsPlace(final Action action, long itemId) {
+		this.action = action;
+		this.itemId = itemId;		
+	}
+
+	public ItemDetailsPlace(final Action action) {
+		this.action = action;		
+	}
+
+	public Action getAction() {
+		return action;
+	}
+
+	@Override
+	public String toString() {
+		return ToStringBuilder.reflectionToString(this);
+	}
+
+	@Override
+	public int hashCode() {
+		return Integer.valueOf(action.ordinal()).hashCode();
+	}
+
+	@Override
+	public boolean equals(Object obj) {
+		if (this == obj) {
+			return true;
+		}
+		if (obj == null) {
+			return false;
+		}
+		if (getClass() != obj.getClass()) {
+			return false;
+		}
+		ItemDetailsPlace other = (ItemDetailsPlace) obj;
+		return other.action == this.action;
+	}
+
+	@Override
+	public String getLabel() {
+		return action.name();
+	}
+
+	@Override
+	public Place asPlace() {
+		return this;
+	}
+
+	private static ItemDetailsPlace[] places;
+
+	public static ItemDetailsPlace[] getActionPlaces() {
+		if (places == null) {
+			places = new ItemDetailsPlace[Action.values().length];
+			int i = 0;
+			for (Action a : Action.values()) {
+				places[i++] = new ItemDetailsPlace(a);
+			}
+		}
+		return places;
+	}
+}

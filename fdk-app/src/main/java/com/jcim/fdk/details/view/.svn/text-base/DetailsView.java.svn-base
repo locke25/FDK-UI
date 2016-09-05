@@ -1,0 +1,89 @@
+package com.inubit.tui.taskmanager.app.details.view;
+
+import java.util.List;
+
+import com.inubit.gui.vaadin.mvp.view.View;
+import com.inubit.tui.taskmanager.app.details.util.TreeItem;
+import com.inubit.tui.taskmanager.app.details.view.subviews.LeftPanelDetails;
+import com.inubit.tui.taskmanager.app.details.view.subviews.RightPanelDetails;
+import com.inubit.tui.taskmanager.persistence.domain.Agency;
+import com.inubit.tui.taskmanager.persistence.domain.Contact;
+import com.inubit.tui.taskmanager.persistence.domain.Incident;
+import com.inubit.tui.taskmanager.persistence.domain.Queue;
+import com.inubit.tui.taskmanager.persistence.domain.SLAState;
+import com.inubit.tui.taskmanager.persistence.domain.ServiceDifference;
+import com.inubit.tui.taskmanager.persistence.domain.SolutionCategory;
+import com.inubit.tui.taskmanager.persistence.domain.category.AbstractCategory;
+import com.inubit.tui.taskmanager.persistence.domain.category.Category;
+
+public interface DetailsView extends View {
+
+	void setPresenter(Presenter presenter);
+	
+	public static interface Presenter {    	
+			
+		void loadDataClicked(String bookingSetId);
+		
+		void loadSelectedService(int bookingIndex, int serviceIndex);
+
+		void updateIncident(Incident incident);
+		
+		public List<SolutionCategory> getAvailableSolutionCategories(long categoryId, long queueId);
+		
+		public List<ServiceDifference> getAvailableServiceDifferences();
+		
+		public List<AbstractCategory> getAvailableCategories();
+		
+		public List<AbstractCategory> getSubProcessForCategory(long catId);
+		
+		public void onCategorySelected(long categoryId);
+		
+		public List<AbstractCategory> resolveToLevel(long categoryId);
+		
+		public List<AbstractCategory> getLevel1Categories();
+
+		void openProposedRecipient(long contactId);
+
+		List<Queue> getAllQueues();
+
+		Queue getQueue(long id);
+
+		void queueChange(long incidentId, long newQueueId);
+
+		void closePopup();
+		
+		void closeCategoryFilterPopup();
+
+		boolean canChangeQueue();
+		
+		void setSelectedCategory(String value, Object categoryId);
+    }
+
+	public void fillSubView(Incident incident);
+	
+	public void showInfo(String message, Object[] args);
+	
+	public void showInfo(String message);
+	
+	public void loadBookingSetDialog(List<TreeItem> bookingSet, String bookingSetId);
+	
+	public RightPanelDetails getRightPanelDetailView();
+	
+	public void setFieldsEnabled(boolean isReadOnly);
+	
+	public void setFieldsEnabledNoPermission(boolean isReadOnly);
+
+
+	void showData(Incident incident, SolutionCategory selectedSolutionCategory, ServiceDifference selectedServiceDifference,
+			Category selectedCategory, List<Contact> contactsPM, List<Contact> contactsZGB);
+
+	void setRightPanel(RightPanelDetails rightPanel);
+
+	long getContactId();
+
+	void setContactId(long contactId);
+
+	LeftPanelDetails getLeftPanelDetailView();
+
+	void updateContactDataAfterLoadBooking(Incident incident);
+}

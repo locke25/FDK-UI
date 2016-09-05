@@ -1,0 +1,565 @@
+package com.inubit.tui.taskmanager.app.itemdetails.view;
+
+import java.text.DateFormat;
+import java.util.Date;
+import java.util.Locale;
+
+import org.apache.commons.lang.StringUtils;
+import org.joda.time.DateTime;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.context.support.ResourceBundleMessageSource;
+import org.vaadin.dialogs.ConfirmDialog;
+
+import com.inubit.gui.vaadin.mvp.view.ViewPort;
+import com.inubit.gui.vaadin.mvp.view.impl.ComponentContainerViewPort;
+import com.inubit.gui.vaadin.mvp.view.impl.IsVaadinComponent;
+import com.inubit.tui.taskmanager.app.TaskManagerApplication;
+import com.inubit.tui.taskmanager.app.components.IncidentTable;
+import com.inubit.tui.taskmanager.dto.ProcessResult;
+import com.inubit.tui.taskmanager.persistence.dao.AgencyDao;
+import com.inubit.tui.taskmanager.persistence.dao.CategoryDao;
+import com.inubit.tui.taskmanager.persistence.dao.HistoryEntryDao;
+import com.inubit.tui.taskmanager.persistence.dao.InboxMessageDao;
+import com.inubit.tui.taskmanager.persistence.domain.Incident;
+import com.inubit.tui.taskmanager.persistence.domain.util.IncidentBean;
+import com.inubit.tui.taskmanager.security.dao.UserCallDao;
+import com.vaadin.data.Validator;
+import com.vaadin.ui.Button;
+import com.vaadin.ui.Button.ClickEvent;
+import com.vaadin.ui.Button.ClickListener;
+import com.vaadin.ui.Component;
+import com.vaadin.ui.CssLayout;
+import com.vaadin.ui.DateField;
+import com.vaadin.ui.FormLayout;
+import com.vaadin.ui.InlineDateField;
+import com.vaadin.ui.Window;
+
+public class ItemDetailsViewImpl extends CssLayout implements ItemDetailsView, IsVaadinComponent {
+
+	private static final Logger log = LoggerFactory.getLogger(ItemDetailsViewImpl.class);
+
+	private ViewPort menuDisplay;
+
+	private ViewPort contentDisplay;
+
+	private ResourceBundleMessageSource messageSource;
+
+	private Presenter presenter;
+
+	private IncidentTable detailsTable;
+
+	private Button cancelAndSaveBtn;
+
+	private Button cancelBtn;
+
+	private Button externCloseBtn;
+
+	private Button internExternCloseBtn;
+
+	private Button finishedBtn;
+
+	private CssLayout buttonFooter;
+
+	private CssLayout overlay;
+
+	private Button responseExistsBtn;
+
+	private Button responseNecessaryBtn;
+
+	private Incident incident;
+
+	private CssLayout menuLayout;
+
+	public ItemDetailsViewImpl(final ResourceBundleMessageSource messageSource, CategoryDao categoryDao, HistoryEntryDao historyDao,
+			UserCallDao userDao, InboxMessageDao inboxMessageDao, AgencyDao agencyDao) {
+
+		this.messageSource = messageSource;
+
+		buildOverlay();
+		buildTable();
+		buildMenuDisplay();
+		buildContentDisplay();
+		buildFooter();
+		buttonFooter = new CssLayout();
+
+		setStyleName("itemDetails");
+
+		registerEvents();
+	}
+
+	private void buildOverlay() {
+
+		overlay = new CssLayout();
+		overlay.setStyleName("overlayDetailView");
+		overlay.setImmediate(true);
+		overlay.setVisible(false);
+
+		Button btn = new Button(messageSource.getMessage("itemdetails.backToList", null, Locale.getDefault()));
+		btn.setStyleName("btnOverlay");
+
+		btn.addListener(new Button.ClickListener() {
+
+			@Override
+			public void buttonClick(ClickEvent event) {
+				presenter.onBackButtonClicked();
+			}
+		});
+
+		overlay.addComponent(btn);
+		addComponent(overlay);
+
+	}
+
+	private void registerEvents() {
+
+		externCloseBtn.addListener(new Button.ClickListener() {
+			@Override
+			public void buttonClick(ClickEvent event) {
+				doExternClose();
+			}
+		});
+
+		internExternCloseBtn.addListener(new Button.ClickListener() {
+			@Override
+			public void buttonClick(ClickEvent event) {
+				doInterExterClose();
+			}
+		});
+
+		finishedBtn.addListener(new Button.ClickListener() {
+			@Override
+			public void buttonClick(ClickEvent event) {
+				doFinish(null);
+			}
+		});
+
+		cancelAndSaveBtn.addListener(new Button.ClickListener() {
+			@Override
+			public void buttonClick(ClickEvent event) {
+				presenter.resetAndJumpToList();
+			}
+		});
+
+		cancelBtn.addListener(new Button.ClickListener() {
+			@Override
+			public void buttonClick(ClickEvent event) {
+				presenter.jumpToList();
+			}
+		});
+
+		responseExistsBtn.addListener(new ClickListener() {
+
+			@Override
+			public void buttonClick(ClickEvent event) {
+				getWindow().showNotification(getMessage("itemdetails.responseExists.notification"));
+				presenter.responseExists(incident);
+			}
+		});
+
+		responseNecessaryBtn.addListener(new ClickListener() {
+
+			@Override
+			public void buttonClick(ClickEvent event) {
+				showReminderPopup(new Date(), new ReminderFinishAction() {
+
+					@Override
+					public void run(Date reminderDate) {
+						getWindow().showNotification(getMessage("itemdetails.responseNecessary.notification"));
+						presenter.responseNecessary(reminderDate, incident);
+					}
+				});
+
+			}
+		});
+	}
+
+	private void doInterExterClose() {
+		log.debug("Click Button internExternClose");
+		long queueId = incident.getQueueId();
+		ProcessResult processResult = presenter.internExternClose(incident);
+		if (processResult.isSuccess()) {
+			presenter.freeLock(incident);
+			presenter.updateIncidentAndShowQueue(incident, queueId);
+		} else {
+			errorHandling(processResult);
+		}
+	}
+
+	private void doExternClose() {
+		log.debug("Click Button externClose");
+		ProcessResult processResult = presenter.externClose(incident);
+		if (processResult.isSuccess()) {
+			presenter.freeLock(incident);
+			presenter.updateIncidentAndShowQueue(incident, incident.getQueueId());
+		} else {
+			errorHandling(processResult);
+		}
+	}
+
+	private void doFinish(Date reminderDate) {
+		log.debug("Click Button finishedBtn");
+		ProcessResult processResult = presenter.finished(incident, reminderDate);
+		if (processResult.isSuccess()) {
+			presenter.freeLock(incident);
+			presenter.updateIncidentAndShowQueue(incident, incident.getQueueId());
+		} else {
+			errorHandling(processResult);
+		}
+	}
+
+	private void buildTable() {
+
+		detailsTable = new IncidentTable(messageSource);
+
+		detailsTable.setSizeFull();
+		detailsTable.setEditable(false);
+		detailsTable.setImmediate(false);
+		detailsTable.setSelectable(false);
+		detailsTable.setSortDisabled(true);
+		detailsTable.setStyleName("detailsTable");
+		addComponent(detailsTable);
+	}
+
+	private void buildFooter() {
+		buttonFooter = new CssLayout();
+		buttonFooter.removeAllComponents();
+		buttonFooter.setStyleName("btnFieldContent");
+		CssLayout btnFieldSet1 = new CssLayout();
+		CssLayout btnFieldSet2 = new CssLayout();
+
+		btnFieldSet1.setStyleName("btnFieldSet1");
+		btnFieldSet2.setStyleName("btnFieldSet2");
+
+		buttonFooter.addComponent(btnFieldSet1);
+		buttonFooter.addComponent(btnFieldSet2);
+
+		buttonFooter.removeAllComponents();
+		buttonFooter.setStyleName("btnFieldContent");
+
+		btnFieldSet1.setStyleName("btnFieldSet1");
+		btnFieldSet2.setStyleName("btnFieldSet2");
+
+		externCloseBtn = new Button(messageSource.getMessage("itemdetails.externCloseBtn", null, Locale.getDefault()));
+		externCloseBtn.setImmediate(false);
+		externCloseBtn.setDescription(messageSource.getMessage("itemdetails.mouseover.externCloseBtn", null, Locale.getDefault()));
+
+		internExternCloseBtn = new Button(messageSource.getMessage("itemdetails.internExternCloseBtn", null, Locale.getDefault()));
+		internExternCloseBtn.setImmediate(false);
+		internExternCloseBtn.setDescription(messageSource.getMessage("itemdetails.mouseover.internExternCloseBtn", null, Locale.getDefault()));
+
+		finishedBtn = new Button(messageSource.getMessage("itemdetails.finishedBtn", null, Locale.getDefault()));
+		finishedBtn.setImmediate(false);
+		finishedBtn.setDescription(messageSource.getMessage("itemdetails.mouseover.finishedBtn", null, Locale.getDefault()));
+
+		responseExistsBtn = new Button(getMessage("itemdetails.responseExists"));
+		responseExistsBtn.setDescription(getMessage("itemdetails.responseExists.description"));
+		responseNecessaryBtn = new Button(getMessage("itemdetails.responseNecessary"));
+		responseNecessaryBtn.setDescription(getMessage("itemdetails.responseNecessary.description"));
+
+		cancelAndSaveBtn = new Button(messageSource.getMessage("itemdetails.cancelsave", null, Locale.getDefault()));
+		cancelAndSaveBtn.setImmediate(true);
+		cancelAndSaveBtn.setDescription(messageSource.getMessage("itemdetails.cancelsave.description", null, Locale.getDefault()));
+
+		cancelBtn = new Button(messageSource.getMessage("itemdetails.cancel", null, Locale.getDefault()));
+		cancelBtn.setImmediate(true);
+		cancelBtn.setDescription(messageSource.getMessage("itemdetails.cancel.description", null, Locale.getDefault()));
+
+		btnFieldSet1.addComponent(cancelAndSaveBtn);
+		btnFieldSet1.addComponent(cancelBtn);
+
+		btnFieldSet1.addComponent(responseExistsBtn);
+		btnFieldSet1.addComponent(responseNecessaryBtn);
+
+		btnFieldSet2.addComponent(externCloseBtn);
+		btnFieldSet2.addComponent(internExternCloseBtn);
+		btnFieldSet2.addComponent(finishedBtn);
+
+		buttonFooter.addComponent(btnFieldSet1);
+		buttonFooter.addComponent(btnFieldSet2);
+
+		CssLayout cb = new CssLayout();
+		cb.setStyleName("cb");
+
+		buttonFooter.addComponent(cb);
+
+		addComponent(buttonFooter);
+
+		if (TaskManagerApplication.DEBUGMODEENABLED) {
+			finishedBtn.setDebugId("itemDetail.finishBtn");
+			buttonFooter.setDebugId("itemDetail.buttonFooter");
+			externCloseBtn.setDebugId("itemDetail.externClose");
+			internExternCloseBtn.setDebugId("itemDetail.ieclose");
+			btnFieldSet1.setDebugId("itemdetails.btnFieldSet1");
+			btnFieldSet2.setDebugId("itemdetails.btnFieldSet2");
+			setDebugId("itemdetails.host");
+		}
+		// DebugIdHelper.setComponentDebugId(this,
+		// TaskManagerApplication.DEBUGMODEENABLED, "ItemDetailsViewImpl", 0);
+	}
+
+	public void addTableData(IncidentBean incident) {
+		overlay.setVisible(false);
+		detailsTable.removeAllItems();
+		detailsTable.addItem(
+				new Object[] { incident.getSlaState(), incident.getStatePic(), incident.getPriority(), incident.getId(), incident.getCategoryId(),
+						incident.getServiceDifferenceId(), incident.getStartBooking().replace(".", "-"), incident.getThreelc(),
+						incident.getCreationDate().replace(".", "-") }, 1);
+	}
+
+	@Override
+	public Component asVaadinComponent() {
+		return this;
+	}
+
+	private void buildMenuDisplay() {
+		menuLayout = new CssLayout();
+		menuLayout.setImmediate(false);
+
+		menuLayout.setMargin(false);
+		menuLayout.setStyleName("itemDetailsMenu");
+
+		this.addComponent(menuLayout);
+
+		if (TaskManagerApplication.DEBUGMODEENABLED) {
+			menuLayout.setDebugId("itemdetails.menulayout");
+		}
+		menuDisplay = new ComponentContainerViewPort(menuLayout);
+
+	}
+
+	private void buildContentDisplay() {
+		// common part: create layout
+		CssLayout mainLayout = new CssLayout();
+		mainLayout.setImmediate(false);
+
+		mainLayout.setMargin(false);
+		mainLayout.setStyleName("itemDetailsContent");
+
+		this.addComponent(mainLayout);
+
+		if (TaskManagerApplication.DEBUGMODEENABLED) {
+			mainLayout.setDebugId("itemdetails.mainlayout");
+		}
+		contentDisplay = new ComponentContainerViewPort(mainLayout);
+	}
+
+	@Override
+	public void setReadOnlyMode() {
+		finishedBtn.setVisible(false);
+		externCloseBtn.setVisible(false);
+		internExternCloseBtn.setVisible(false);
+	}
+
+	@Override
+	public void setResponseButtonDisabled() {
+		responseNecessaryBtn.setEnabled(false);
+		responseExistsBtn.setEnabled(false);
+	}
+
+	@Override
+	public void setMenueDisabled() {
+		menuLayout.setEnabled(false);
+	}
+
+	@Override
+	public void setOnylCancel() {
+		cancelAndSaveBtn.setVisible(false);
+		cancelBtn.setVisible(true);
+	}
+
+	@Override
+	public void setEditMode() {
+		finishedBtn.setVisible(true);
+		externCloseBtn.setVisible(true);
+		internExternCloseBtn.setVisible(true);
+		menuLayout.setEnabled(true);
+		responseNecessaryBtn.setEnabled(true);
+		responseExistsBtn.setEnabled(true);
+		cancelAndSaveBtn.setVisible(true);
+		cancelBtn.setVisible(false);
+	}
+
+	public boolean isReadOnly() {
+		return !(finishedBtn.isVisible() && externCloseBtn.isVisible() && internExternCloseBtn.isVisible());
+	}
+
+	@Override
+	public ViewPort getMenuDisplay() {
+		return menuDisplay;
+	}
+
+	@Override
+	public ViewPort getContentDisplay() {
+		return contentDisplay;
+	}
+
+	@Override
+	public void setPresenter(Presenter presenter) {
+		this.presenter = presenter;
+	}
+
+	public void setIncident(Incident incident) {
+		this.incident = incident;
+	}
+
+	private void errorHandling(ProcessResult processResult) {
+
+		if (processResult.getErrorCode().equals(ProcessResult.ERROR_REMINDER_NEEDED)) {
+			handleReminderNeeded(processResult);
+		} else {
+			handleDefaultError(processResult);
+		}
+	}
+
+	private void handleReminderNeeded(ProcessResult processResult) {
+		showReminderPopup(processResult.getProposedReminderDate(), new ReminderFinishAction() {
+			@Override
+			public void run(Date reminderDate) {
+				doFinish(reminderDate);
+			}
+		});
+	}
+
+	private void showReminderPopup(Date proposedDate, final ReminderFinishAction reminderFinishAction) {
+
+		final Window win = new Window(getMessage("itemdetails.reminderDate"));
+		win.setWidth("450px");
+		win.setHeight("320px");
+		win.setResizable(false);
+		win.setClosable(true);
+		win.setImmediate(true);
+		win.setModal(true);
+
+		FormLayout layout = new FormLayout();
+
+		final InlineDateField dateField = new InlineDateField(getMessage("itemdetails.reminderDate"));
+		dateField.setResolution(DateField.RESOLUTION_MIN);
+		dateField.setValue(proposedDate);
+
+		dateField.setValidationVisible(true);
+		dateField.setImmediate(true);
+
+		dateField.addValidator(new Validator() {
+
+			@Override
+			public void validate(Object value) throws InvalidValueException {
+				if (!isValid(value)) {
+					throw new InvalidValueException(getMessage("itemdetails.reminderDate.errorInPast"));
+				}
+			}
+
+			@Override
+			public boolean isValid(Object value) {
+				Date date = (Date) value;
+				Date now = new Date();
+
+				return now.before(date);
+			}
+		});
+
+		layout.addComponent(dateField);
+
+		Button ok = new Button(getMessage("itemdetails.reminderDate.buttonOk"));
+		ok.addListener(new ClickListener() {
+
+			@Override
+			public void buttonClick(ClickEvent event) {
+				Object value = dateField.getValue();
+				Date date = (Date) value;
+
+				if (dateField.isValid()) {
+					getWindow().removeWindow(win);
+					reminderFinishAction.run(date);
+				}
+			}
+		});
+		Button cancel = new Button(getMessage("itemdetails.reminderDate.buttonCancel"));
+		cancel.addListener(new ClickListener() {
+			@Override
+			public void buttonClick(ClickEvent event) {
+				getWindow().removeWindow(win);
+			}
+		});
+
+		layout.addComponent(ok);
+		layout.addComponent(cancel);
+
+		win.addComponent(layout);
+
+		getWindow().addWindow(win);
+		win.center();
+	}
+
+	private void handleDefaultError(ProcessResult processResult) {
+		String error = StringUtils.isNotBlank(processResult.getErrorCode()) ? processResult.getErrorCode() : "Default";
+
+		// remove trailing dot
+		if (error.startsWith(".")) { 
+			error = error.substring(1);
+		}
+		String errorCode = "errorcode." + error;
+
+		String message = getMessage("process.result." + errorCode);
+		presenter.getShell().showError(message, new RuntimeException());
+	}
+
+	private String getMessage(String key) {
+		return messageSource.getMessage(key, null, Locale.getDefault());
+	}
+
+	@Override
+	public void setCloseIncidentButtonsEnabled(boolean closeAble) {
+		internExternCloseBtn.setEnabled(closeAble);
+		externCloseBtn.setEnabled(closeAble);
+		finishedBtn.setEnabled(closeAble);
+	}
+	
+	@Override
+	public void setCloseIncidentButtonsNoPermission() {
+		externCloseBtn.setEnabled(false);
+		finishedBtn.setEnabled(false);
+	}
+
+	@Override
+	public void overlayDetailView() {
+		overlay.setVisible(true);
+	}
+
+	private interface ReminderFinishAction {
+		void run(Date reminderDate);
+	}
+
+	@Override
+	public void setButtonResponseExistsVisibility(boolean visible) {
+		responseExistsBtn.setVisible(visible);
+	}
+
+	@Override
+	public void setButtonResponseNecessaryVisibility(boolean visible) {
+		responseNecessaryBtn.setVisible(visible);
+	}
+
+	@Override
+	public void setItem(Incident item) {
+		this.incident = item;
+
+	}
+
+	@Override
+	public void showConfirmDialog(Object[] params) {
+		ConfirmDialog d = ConfirmDialog.getFactory().create(getMessage("itemdetails.confirmdialog.caption"),
+				messageSource.getMessage("itemdetails.confirmdialog.message", params, Locale.getDefault()),
+				getMessage("itemdetails.confirmdialog.ok"), "");
+		d.getCancelButton().setVisible(false);
+		d.setClosable(false);
+		d.setModal(true);
+		d.show(this.getWindow(), new ConfirmDialog.Listener() {
+
+			@Override
+			public void onClose(ConfirmDialog dialog) {
+				presenter.onBackButtonClicked();
+			}
+		}, true);
+	}
+}

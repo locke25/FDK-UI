@@ -1,0 +1,199 @@
+package com.inubit.tui.taskmanager.app.details.view;
+
+import java.util.List;
+import java.util.Locale;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.context.support.ResourceBundleMessageSource;
+
+import com.inubit.gui.vaadin.mvp.view.impl.IsVaadinComponent;
+import com.inubit.tui.taskmanager.app.TaskManagerApplication;
+import com.inubit.tui.taskmanager.app.details.util.TreeItem;
+import com.inubit.tui.taskmanager.app.details.view.subviews.LeftPanelDetails;
+import com.inubit.tui.taskmanager.app.details.view.subviews.RightPanelDetails;
+import com.inubit.tui.taskmanager.persistence.dao.CategoryDao;
+import com.inubit.tui.taskmanager.persistence.dao.ContactDao;
+import com.inubit.tui.taskmanager.persistence.dao.IncidentDao;
+import com.inubit.tui.taskmanager.persistence.domain.Contact;
+import com.inubit.tui.taskmanager.persistence.domain.Incident;
+import com.inubit.tui.taskmanager.persistence.domain.ServiceDifference;
+import com.inubit.tui.taskmanager.persistence.domain.SolutionCategory;
+import com.inubit.tui.taskmanager.persistence.domain.category.Category;
+import com.inubit.tui.taskmanager.persistence.service.ContactMappingPmService;
+import com.inubit.tui.taskmanager.persistence.service.ContactMappingZgbService;
+import com.inubit.tui.taskmanager.security.domain.User;
+import com.inubit.tui.taskmanager.service.ServiceFacade;
+import com.inubit.tui.taskmanager.service.category.CategoryService;
+import com.vaadin.ui.Component;
+import com.vaadin.ui.CssLayout;
+
+public class DetailsViewImpl extends CssLayout implements DetailsView,
+		IsVaadinComponent {
+
+	private static final Logger log = LoggerFactory
+			.getLogger(DetailsViewImpl.class);
+
+	private Presenter presenter;
+	private CssLayout layout;
+	private LeftPanelDetails leftPanel;
+	private RightPanelDetails rightPanel;
+	private ServiceFacade serviceFacade;
+
+	private ResourceBundleMessageSource messageSource;
+
+	private TaskManagerApplication app;
+
+	private long contactId;
+
+    private final ContactMappingZgbService contactMappingZgbService;
+    private final ContactMappingPmService contactMappingPmService;
+    
+    private final CategoryService categoryService;
+	
+	public DetailsViewImpl(final ResourceBundleMessageSource messageSource,
+			final ServiceFacade serviceFacade,
+			final TaskManagerApplication app, final IncidentDao incidentDao,
+			final ContactDao contactDao,
+			final CategoryDao categoryDao,
+			final ContactMappingZgbService contactMappingZgbService,
+			final CategoryService categoryService,
+			final ContactMappingPmService contactMappingPmService) {
+		this.messageSource = messageSource;
+		this.serviceFacade = serviceFacade;
+		this.app = app;
+        this.contactMappingZgbService = contactMappingZgbService;
+        this.categoryService = categoryService;
+        this.contactMappingPmService = contactMappingPmService;
+
+		layout = buildContentDisplay();
+		buildMainLayout(incidentDao, contactDao, categoryDao);
+		setStyleName("detailsViewContent");
+	}
+
+	@Override
+	public Component asVaadinComponent() {
+		return this;
+	}
+
+	private CssLayout buildContentDisplay() {
+
+		CssLayout mainLayout = new CssLayout();
+		mainLayout.setImmediate(false);
+		mainLayout.setMargin(false);
+
+		this.addComponent(mainLayout);
+		return mainLayout;
+	}
+
+	@Override
+	public void setPresenter(Presenter presenter) {
+		this.presenter = presenter;
+		rightPanel.setPresenter(presenter);
+		leftPanel.setPresenter(presenter);
+	}
+
+	@Override
+	public void setFieldsEnabled(boolean isReadOnly) {
+		rightPanel.readOnly(isReadOnly);
+		leftPanel.readOnly(isReadOnly);
+	}
+	
+	@Override
+	public void setFieldsEnabledNoPermission(boolean isReadOnly) {
+		rightPanel.hasNoPermission();
+		leftPanel.readOnly(isReadOnly);
+	}
+
+	private void buildMainLayout(final IncidentDao incidentDao,
+			final ContactDao contactDao, final CategoryDao categoryDao) {
+
+		leftPanel = new LeftPanelDetails(messageSource);
+		rightPanel = new RightPanelDetails(messageSource,serviceFacade, app, incidentDao, contactMappingZgbService, categoryService, contactMappingPmService);
+
+		layout.addComponent(leftPanel);
+		layout.addComponent(rightPanel);
+
+		CssLayout clearingElement = new CssLayout();
+		clearingElement.setStyleName("cb");
+		layout.addComponent(clearingElement);
+
+		if(TaskManagerApplication.DEBUGMODEENABLED){
+			leftPanel.setDebugId("leftPanel.host");
+			rightPanel.setDebugId("rightPanel.host");
+			clearingElement.setDebugId("detailsview.clearingElement");
+			setDebugId("detailsview.host");
+		}
+	}
+
+	@Override
+	public void showInfo(String messageSrcId, Object[] args) {
+		getWindow().showNotification(
+				messageSource.getMessage(messageSrcId, args,
+						Locale.getDefault()));
+	}
+
+	@Override
+	public void showInfo(String message) {
+		getWindow().showNotification(message);
+	}
+
+	@Override
+	public void loadBookingSetDialog(List<TreeItem> bookingSet, String bookingSetId) {
+		leftPanel.openBookingSetTreeDialog(bookingSet, bookingSetId);
+	}
+
+	@Override
+	public void fillSubView(Incident incident) {
+		leftPanel.fillSubView(incident);
+		rightPanel.updateContactDataAfterLoadBooking(incident);
+	}
+
+
+	@Override
+	public void updateContactDataAfterLoadBooking(Incident incident) {
+		rightPanel.updateContactDataAfterLoadBooking(incident);
+	}
+
+	@Override
+	public void showData(Incident incident,
+			SolutionCategory selectedSolutionCategory,
+			ServiceDifference selectedServiceDifference,
+			Category selectedCategory, List<Contact> contactsPM,List<Contact> contactsZGB) {
+		
+	    // TTKM 1475: returns boolean true the first time the Details view is loaded. If true the method fillData is called
+	    // to fill the data in the drop down menus.
+		boolean hasUpdated = rightPanel.updateServiceDifferenceCategoryAndSolutionCategory(
+				selectedServiceDifference, selectedCategory,
+				selectedSolutionCategory);
+		if(hasUpdated)
+		rightPanel.fillData(incident, selectedSolutionCategory,	selectedServiceDifference, selectedCategory);
+		
+		rightPanel.fillContactData(contactsPM,contactsZGB);
+		leftPanel.fillData(incident);
+	}
+	
+	@Override
+	public void setRightPanel(RightPanelDetails rightPanel) {
+		this.rightPanel = rightPanel;
+	}
+	
+	@Override
+	public RightPanelDetails getRightPanelDetailView() {
+		return rightPanel;
+	}
+	
+	@Override
+	public LeftPanelDetails getLeftPanelDetailView() {
+		return leftPanel;
+	}
+	
+	@Override
+	public long getContactId() {
+		return contactId;
+	}
+	@Override
+	public void setContactId(long contactId) {
+		this.contactId = contactId;
+	}
+}

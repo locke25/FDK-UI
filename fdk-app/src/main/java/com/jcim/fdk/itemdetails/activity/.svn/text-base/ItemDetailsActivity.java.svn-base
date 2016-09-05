@@ -1,0 +1,545 @@
+package com.inubit.tui.taskmanager.app.itemdetails.activity;
+
+import java.util.Date;
+import java.util.List;
+import java.util.Locale;
+
+import net.anotheria.moskito.aop.annotation.Monitor;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationContext;
+import org.springframework.context.MessageSource;
+import org.springframework.context.support.ResourceBundleMessageSource;
+
+import com.inubit.gui.vaadin.mvp.activity.AbstractActivity;
+import com.inubit.gui.vaadin.mvp.activity.ActivityManager;
+import com.inubit.gui.vaadin.mvp.event.EventBus;
+import com.inubit.gui.vaadin.mvp.event.HandlerRegistration;
+import com.inubit.gui.vaadin.mvp.place.Place;
+import com.inubit.gui.vaadin.mvp.place.PlaceController;
+import com.inubit.gui.vaadin.mvp.shell.Shell;
+import com.inubit.gui.vaadin.mvp.view.ViewPort;
+import com.inubit.tui.taskmanager.app.TaskManagerApplication;
+import com.inubit.tui.taskmanager.app.details.event.CategorySelectedEvent;
+import com.inubit.tui.taskmanager.app.details.event.ContactSelectedEvent;
+import com.inubit.tui.taskmanager.app.details.view.DetailsView;
+import com.inubit.tui.taskmanager.app.details.view.subviews.RightPanelDetails;
+import com.inubit.tui.taskmanager.app.itemdetails.place.ItemDetailsPlace;
+import com.inubit.tui.taskmanager.app.itemdetails.view.ItemDetailsView;
+import com.inubit.tui.taskmanager.app.itemlist.place.ItemListPlace;
+import com.inubit.tui.taskmanager.app.navigation.activity.NavigationActivityMapper;
+import com.inubit.tui.taskmanager.app.workbench.activity.WorkbenchMVPSubContainer.Actions;
+import com.inubit.tui.taskmanager.dto.ProcessResult;
+import com.inubit.tui.taskmanager.event.FreeScreenEvent;
+import com.inubit.tui.taskmanager.persistence.dao.CategoryDao;
+import com.inubit.tui.taskmanager.persistence.dao.HistoryEntryDao;
+import com.inubit.tui.taskmanager.persistence.dao.IncidentDao;
+import com.inubit.tui.taskmanager.persistence.dao.OutboxMessageDao;
+import com.inubit.tui.taskmanager.persistence.dao.Scheduler;
+import com.inubit.tui.taskmanager.persistence.domain.HistoryAction;
+import com.inubit.tui.taskmanager.persistence.domain.Incident;
+import com.inubit.tui.taskmanager.persistence.domain.Incident.Status;
+import com.inubit.tui.taskmanager.persistence.domain.OutboxMessage;
+import com.inubit.tui.taskmanager.persistence.domain.category.Category;
+import com.inubit.tui.taskmanager.persistence.domain.util.IncidentBean;
+import com.inubit.tui.taskmanager.security.dao.UserCallDao;
+import com.inubit.tui.taskmanager.security.domain.User;
+import com.inubit.tui.taskmanager.security.exceptions.AccessDeniedException;
+import com.inubit.tui.taskmanager.service.IncidentLockService;
+import com.inubit.tui.taskmanager.service.ProcessService;
+import com.inubit.tui.taskmanager.service.ServiceFacade;
+import com.vaadin.terminal.ThemeResource;
+import com.vaadin.ui.Embedded;
+
+@Monitor
+public class ItemDetailsActivity extends AbstractActivity implements ItemDetailsView.Presenter {
+
+	private static final Logger log = LoggerFactory.getLogger(ItemDetailsActivity.class);
+
+	private final ItemDetailsView view;
+
+	private final NavigationActivityMapper navigationActivityMapper;
+
+	private final ItemDetailsActivityMapper itemDetailsActionActivityMapper;
+
+	private ActivityManager detailsActivityManager;
+
+	private final IncidentDao incidentDao;
+
+	private final OutboxMessageDao outboxMessageDao;
+
+	private final CategoryDao categoryDao;
+
+	private final ProcessService processService;
+
+	private final Shell shell;
+
+	private final DetailsView detailView;
+
+	private final MessageSource messageSource;
+
+	private final IncidentLockService incidentLockService;
+
+	private final ServiceFacade serviceFacade;
+
+	private final HistoryEntryDao historyEntryDao;
+
+	private final TaskManagerApplication taskmanagerApp;
+
+	private ItemListPlace parentPlace;
+
+	private final PlaceController placeController;
+
+	private final UserCallDao userCallDao;
+
+	private final Scheduler scheduler;
+
+	private HandlerRegistration catSelectReg, contactSelect, freezeScreenReg;
+
+	public ItemDetailsActivity(ApplicationContext ctx, Place parentPlace) {
+		processService = ctx.getBean(ProcessService.class);
+		view = ctx.getBean(ItemDetailsView.class);
+		view.setPresenter(this);
+		this.shell = ctx.getBean(Shell.class);
+
+		navigationActivityMapper = new NavigationActivityMapper(ctx, ItemDetailsPlace.getActionPlaces());
+		itemDetailsActionActivityMapper = new ItemDetailsActivityMapper(ctx, parentPlace);
+		incidentDao = ctx.getBean(IncidentDao.class);
+		historyEntryDao = ctx.getBean(HistoryEntryDao.class);
+		detailView = ctx.getBean(DetailsView.class);
+		serviceFacade = ctx.getBean(ServiceFacade.class);
+		taskmanagerApp = ctx.getBean(TaskManagerApplication.class);
+		messageSource = ctx.getBean(ResourceBundleMessageSource.class);
+		categoryDao = ctx.getBean(CategoryDao.class);
+		incidentLockService = ctx.getBean(IncidentLockService.class);
+		placeController = ctx.getBean(PlaceController.class);
+		userCallDao = ctx.getBean(UserCallDao.class);
+		outboxMessageDao = ctx.getBean(OutboxMessageDao.class);
+		scheduler = ctx.getBean(Scheduler.class);
+		this.parentPlace = (ItemListPlace) parentPlace;
+
+	}
+
+	@Override
+	public void start(ViewPort display, EventBus eventBus) {
+		final ActivityManager navigationActivityManager = new ActivityManager(navigationActivityMapper, eventBus);
+		navigationActivityManager.setViewPort(view.getMenuDisplay());
+
+		detailsActivityManager = new ActivityManager(itemDetailsActionActivityMapper, eventBus);
+		detailsActivityManager.setViewPort(view.getContentDisplay());
+
+		catSelectReg = eventBus.addHandler(CategorySelectedEvent.class, new CategorySelectedEvent.Handler() {
+
+			@Override
+			public void update(long categoryId) {
+				setButtonsEnabled(categoryId);
+			}
+		});
+
+		contactSelect = eventBus.addHandler(ContactSelectedEvent.class, new ContactSelectedEvent.Handler() {
+
+			@Override
+			public void update(long contact) {
+				placeController.goTo(ItemDetailsPlace.getActionPlaces()[1]);
+			}
+		});
+
+		update(parentPlace);
+
+		display.setView(view);
+
+		freezeScreenReg = taskmanagerApp.getCentralEventBus().addHandler(FreeScreenEvent.class, new FreeScreenEvent.Handler() {
+
+			@Override
+			public void freezeScreen(final long incidentId, final String unlockingUserId) {
+				log.info("ITEMDETAILS USERID:" + unlockingUserId);
+				log.debug("ITEMDETAILS USERID:" + unlockingUserId);
+
+				boolean wasUnlockedByOtherUse = !unlockingUserId.equals(((User) taskmanagerApp.getUser()).getId());
+				if (parentPlace.getItemId() == incidentId && wasUnlockedByOtherUse) {
+
+					showWarningMessage(unlockingUserId);
+					taskmanagerApp.getPusher().push();
+				}
+			}
+
+			private void showWarningMessage(final String unlockingUserId) {
+				User unlockingUser = userCallDao.getUserById(unlockingUserId);
+
+				Object[] params = new Object[] { unlockingUser.getFirstName(), unlockingUser.getLastName(), unlockingUser.getUserName() };
+				view.showConfirmDialog(params);
+			}
+		});
+	}
+
+	@Override
+	public void onStop() {
+		if (catSelectReg != null) {
+			catSelectReg.removeHandler();
+		}
+		if (freezeScreenReg != null) {
+			freezeScreenReg.removeHandler();
+		}
+		if (contactSelect != null) {
+			contactSelect.removeHandler();
+		}
+		super.onStop();
+	}
+
+	@Override
+	public void update(Place place) {
+		parentPlace = (ItemListPlace) place;
+		detailsActivityManager.getCurrentActivity().update(place);
+
+		final long itemId = (parentPlace).getItemId();
+		detailView.getRightPanelDetailView().canUpdate(true);
+
+		User user = (User) taskmanagerApp.getUser();
+		Incident incident = null;
+		try {
+			incident = serviceFacade.getIncidentByUser(user.getId(), itemId);
+			showItem(incident);
+			setViewMode(incident);
+
+		} catch (AccessDeniedException e) {
+			incident = incidentDao.retrieve(itemId);
+			showItem(incident);
+			setViewMode(incident);
+			readOnlyModeFieldsNoPermission();
+			view.setCloseIncidentButtonsNoPermission();
+			
+		}
+		if (incidentLockService.isLocked(user, incident)) {
+			readOnlyMode();
+			readOnlyModeFields();
+			view.setOnylCancel();
+			view.setResponseButtonDisabled();
+			view.setMenueDisabled();
+			
+			log.debug("incident already locked. user entry over url. detail view switch in readonly mode");
+		}
+	}
+
+	/**
+	 * Set View Editable depends on Incident Status
+	 * 
+	 * @param incident
+	 * @return
+	 */
+	private void setViewMode(Incident incident) {
+
+		view.setButtonResponseExistsVisibility(false);
+		view.setButtonResponseNecessaryVisibility(false);
+		showLoadButton(true);
+		editModeFields();
+		
+		switch (incident.getStatus()) {
+		case NEW:
+			editMode();
+			setButtonsEnabled((incident.getCategoryId() > 0) ? incident.getCategoryId() : -1);
+			view.setButtonResponseNecessaryVisibility(true);
+			break;
+		case REMINDER_NECESSARY:
+			editMode();
+			setButtonsEnabled(incident.getCategoryId());
+			view.setButtonResponseExistsVisibility(true);
+			break;
+		case CLOSED_EXTERNAL:
+			editMode();
+			showLoadButton(false);
+			setButtonsEnabled(incident.getCategoryId());
+			break;
+		case CLOSED_EXTERNAL_INTERNAL:
+			readOnlyMode();
+			readOnlyModeFields();
+			view.setResponseButtonDisabled();
+			view.setOnylCancel();
+			break;
+		case RESPONSE_EXISTS:
+			view.setButtonResponseNecessaryVisibility(true);
+			editMode();
+			setButtonsEnabled(incident.getCategoryId());
+			break;
+		case EXTERNAL_INPROCESS:
+			readOnlyMode();
+			setButtonsEnabled(-1);
+			view.setButtonResponseExistsVisibility(true);
+			break;
+		default:
+			readOnlyMode();
+			setButtonsEnabled(-1);
+		}
+	}
+
+	private void setButtonsEnabled(long categoryId) {
+		if (categoryId > 0) {
+			view.setCloseIncidentButtonsEnabled(true);
+		} else {
+			view.setCloseIncidentButtonsEnabled(false);
+		}
+	}
+
+	private void readOnlyMode() {
+		view.setReadOnlyMode();
+	}
+	
+	private void readOnlyModeFieldsNoPermission() {
+		detailView.setFieldsEnabledNoPermission(false);
+	}
+	
+	private void readOnlyModeFields() {
+		detailView.setFieldsEnabled(false);
+	}
+	
+	private void editModeFields() {
+		detailView.setFieldsEnabled(true);
+	}
+
+	private void showLoadButton(boolean show) {
+		detailView.getLeftPanelDetailView().showLoadButtonAndField(show);
+	}
+
+	private void editMode() {
+		view.setEditMode();
+	}
+
+	private void showItem(final Incident incident) {
+		view.addTableData(getIncidentBean(incident.getId()));
+		view.setItem(incident);
+	}
+
+	@Override
+	public void onShowIncident(Incident incident) {
+		placeController.goTo(new ItemListPlace(Actions.SHOW, incident.getId()));
+	}
+
+	public void updateIncidentAndShowQueue(long incidentId, long queueId) {
+
+		partialUpdate(incidentId);
+		// final long queueId = incidentDao.retrieve(incidentId).getQueueId();
+		placeController.goTo(new ItemListPlace(Actions.LIST, queueId));
+	}
+
+	private void partialUpdate(long incidentId) {
+		final RightPanelDetails subView = detailView.getRightPanelDetailView();
+		Incident incident = detailView.getLeftPanelDetailView().getIncidentContent();
+		writeCategoryHistory(subView, incident);
+		
+		incidentDao.partialUpdate(incidentId, subView.getSelectedCategoryId(), subView.getSelectedSolutionCategroyId(),
+				subView.getSelectedServiceDifferenceId(),
+				((User) taskmanagerApp.getUser()).getFirstName() + " " + ((User) taskmanagerApp.getUser()).getLastName());
+	}
+
+	private void writeCategoryHistory(RightPanelDetails subView, Incident oldIncident) {
+		if (subView.getSelectedCategoryId() != -1) {
+			if (oldIncident.getCategoryId() == 0 || oldIncident.getCategoryId() == -1)
+				historyEntryDao.create(oldIncident.getId(), ((User) taskmanagerApp.getUser()).getId(), oldIncident.getQueueId(),
+						subView.getSelectedCategoryId(), subView.getSelectedServiceDifferenceId(), oldIncident.getSlaState(),
+						oldIncident.getStatus(), oldIncident.getPriority(), subView.getSelectedSolutionCategroyId(),
+						oldIncident.getCommunicationChannel(), HistoryAction.INCIDENT_SETCATEGORY);
+
+			if (oldIncident.getCategoryId() > 0 && oldIncident.getCategoryId() != subView.getSelectedCategoryId())
+				historyEntryDao.create(oldIncident.getId(), ((User) taskmanagerApp.getUser()).getId(), oldIncident.getQueueId(),
+						subView.getSelectedCategoryId(), subView.getSelectedServiceDifferenceId(), oldIncident.getSlaState(),
+						oldIncident.getStatus(), oldIncident.getPriority(), subView.getSelectedSolutionCategroyId(),
+						oldIncident.getCommunicationChannel(), HistoryAction.INCIDENT_SETCATEGORYAGAIN);
+
+		}
+	}
+
+	public ProcessResult externClose(Incident incident) {
+		try {
+			RightPanelDetails subView = detailView.getRightPanelDetailView();
+			String processName = categoryDao.getProcess(subView.getSelectedCategoryId());
+			List<OutboxMessage> messages = outboxMessageDao.getAllMessages(incident.getId());
+			User user = (User) taskmanagerApp.getUser();
+			String lastEditor = user.getFirstName() + " " + user.getLastName();
+
+			log.debug("solution -> {}, service -> {}", subView.getSelectedSolutionCategroyId(), subView.getSelectedServiceDifferenceId());
+			return processService.externClose(incident, messages, processName, user, null, subView.getSelectedSolutionCategroyId(),
+					subView.getSelectedServiceDifferenceId(), subView.getSelectedCategoryId(), lastEditor);
+		} catch (NullPointerException e) {
+			// this occurs when there is a timeout when calling the iS
+			return createProcessTimeout();
+		}
+	}
+
+	private ProcessResult createProcessTimeout() {
+		ProcessResult result = new ProcessResult();
+		result.setSuccess(false);
+		result.setErrorCode("timeout");
+		return result;
+	}
+
+	public ProcessResult internExternClose(Incident incident) {
+		try {
+			RightPanelDetails subView = detailView.getRightPanelDetailView();
+			String processName = categoryDao.getProcess(subView.getSelectedCategoryId());
+			List<OutboxMessage> messages = outboxMessageDao.getAllMessages(incident.getId());
+			User user = (User) taskmanagerApp.getUser();
+			String lastEditor = user.getFirstName() + " " + user.getLastName();
+
+			log.debug("solution -> {}, service -> {}", subView.getSelectedSolutionCategroyId(), subView.getSelectedServiceDifferenceId());
+			return processService.internExternClose(incident, messages, processName, user, null, subView.getSelectedSolutionCategroyId(),
+					subView.getSelectedServiceDifferenceId(), subView.getSelectedCategoryId(), lastEditor);
+		} catch (NullPointerException e) {
+			// this occurs when there is a timeout when calling the iS
+			return createProcessTimeout();
+		}
+	}
+
+	public ProcessResult finished(Incident incident, Date reminderDate) {
+		try {
+			RightPanelDetails subView = detailView.getRightPanelDetailView();
+			String processName = categoryDao.getProcess(subView.getSelectedCategoryId());
+			List<OutboxMessage> messages = outboxMessageDao.getAllMessages(incident.getId());
+			User user = (User) taskmanagerApp.getUser();
+			String lastEditor = user.getFirstName() + " " + user.getLastName();
+
+			log.debug(
+					"category -> {} solution -> {}, service -> {}",
+					new Object[] { subView.getSelectedCategoryId(), subView.getSelectedSolutionCategroyId(), subView.getSelectedServiceDifferenceId() });
+
+			return processService.finished(incident, messages, processName, user, reminderDate, subView.getSelectedSolutionCategroyId(),
+					subView.getSelectedServiceDifferenceId(), subView.getSelectedCategoryId(), lastEditor);
+
+		} catch (NullPointerException e) {
+			// this occurs when there is a timeout when calling the iS
+			return createProcessTimeout();
+		}
+	}
+
+	public void freeLock(final Incident incident) {
+		incidentLockService.freeLockByIncident(incident);
+	}
+
+	public Shell getShell() {
+		return this.shell;
+	}
+
+	@Override
+	public void onBackButtonClicked() {
+		Incident incident = incidentDao.retrieve(parentPlace.getItemId());
+		
+		historyEntryDao.create(incident.getId(),  ((User) taskmanagerApp.getUser()).getId(), incident.getQueueId(), incident.getCategoryId(),
+				incident.getServiceDifferenceId(), incident.getSlaState(),incident.getStatus(), incident.getPriority(),
+				incident.getSolutionCategoryId(), incident.getCommunicationChannel(),HistoryAction.INCIDENT_SHELVE);
+		
+		
+		placeController.goTo(new ItemListPlace(Actions.LIST, incident.getQueueId()));
+		
+	}
+
+	private IncidentBean getIncidentBean(long id) {
+
+		List<IncidentBean> incidentBeanList = incidentDao.searchByKey("id:" + id);
+		if (incidentBeanList.size() > 0) {
+			IncidentBean incidentBean = incidentBeanList.get(0);
+			Embedded image = null;
+			switch (incidentBean.getSlaStateValue()) {
+			case GREEN:
+				image = new Embedded("", new ThemeResource("img/icons/icon_sla-01.png"));
+				break;
+			case RED:
+				image = new Embedded("", new ThemeResource("img/icons/icon_sla-03.png"));
+				break;
+			case YELLOW:
+				image = new Embedded("", new ThemeResource("img/icons/icon_sla-02.png"));
+				break;
+			}
+
+			image.setType(Embedded.TYPE_IMAGE);
+			incidentBean.setSlaState(image);
+
+			Embedded statePic = new Embedded("", new ThemeResource("img/icon_sprite_status.png"));
+			incidentBean.setStatePic(statePic);
+			String styleState = "stateStyle" + incidentBean.getState().ordinal();
+			statePic.setStyleName(styleState);
+
+			String description = messageSource.getMessage("globalSearch.status." + incidentBean.getState().toString(), null, Locale.getDefault());
+
+			if (incidentLockService.getLockIncidentIds().contains(incidentBean.getId())) {
+				String userId = incidentLockService.getLockedIncidents().get(incidentBean.getId());
+				incidentBean.setState(Status.INPROCESS);
+				description = messageSource.getMessage("globalSearch.status." + Status.INPROCESS.toString(), null, Locale.getDefault());
+				styleState = "stateStyle" + Status.INPROCESS.ordinal();
+				statePic.setStyleName(styleState);
+				if (userId != null) {
+					User user = userCallDao.getUserById(userId);
+					String userName = user.getUserReadableIdentifier();
+					description += ", " + messageSource.getMessage("incident.inprogress", new Object[] { userName }, Locale.getDefault());
+				}
+			}
+			statePic.setDescription(description);
+
+			return incidentBean;
+		}
+		return new IncidentBean();
+	}
+
+	public long getQueueId(final long incidentId) {
+		return incidentDao.retrieve(incidentId).getQueueId();
+	}
+
+	@Override
+	public void resetAndJumpToList() {
+		Incident incident = detailView.getLeftPanelDetailView().getIncidentContent();
+		Incident incidentLoad = incidentDao.retrieve(incident.getId());
+		
+
+		final RightPanelDetails subView = detailView.getRightPanelDetailView();
+		// Non Updated Incident the method look that progressChange the Category
+		writeCategoryHistory(subView, incident);
+		// Update the data from the RightPanel
+		incident.setCategoryId(subView.getSelectedCategoryId());
+		incident.setSolutionCategoryId(subView.getSelectedSolutionCategroyId());
+		incident.setServiceDifferenceId(subView.getSelectedServiceDifferenceId());
+		incidentDao.updateServiceAndCategoryServiceDiffSolutionCat(incident);
+		if (!view.isReadOnly()) {
+			log.info("freeLockByIncident");
+			incidentLockService.freeLockByIncident(incident);
+		}
+		onBackButtonClicked();
+	}
+	
+	@Override
+	public void jumpToList() {
+		onBackButtonClicked();
+	}
+
+	@Override
+	public void responseExists(Incident incident) {
+		updateIncidentStatus(incident, Status.RESPONSE_EXISTS, HistoryAction.RESPONSE_EXISTS);
+		scheduler.unregister(incident.getId());
+		view.setButtonResponseExistsVisibility(false);
+		view.setButtonResponseNecessaryVisibility(true);
+		editMode();
+		setButtonsEnabled(incident.getCategoryId());
+		// TUI-15
+		// resetAndJumpToList();
+	}
+
+	private void updateIncidentStatus(Incident incident, Status status, HistoryAction action) {
+		String userId = taskmanagerApp.getLoggedInUserId();
+
+		historyEntryDao.create(incident, userId, action);
+		log.info(incident.getCategoryId()+" - "+ incident.getSolutionCategoryId() +" - "+ incident.getServiceDifferenceId());
+		incidentDao.updateStatus(incident.getId(), status);
+	}
+
+	@Override
+	public void responseNecessary(Date reminderDate, Incident incident) {
+		updateIncidentStatus(incident, Status.EXTERNAL_INPROCESS, HistoryAction.INCIDENT_REMINDER);
+		scheduler.escalateOn(incident.getId(), Status.REMINDER_NECESSARY, reminderDate);
+		resetAndJumpToList();
+	}
+
+	@Override
+	public void updateIncidentAndShowQueue(Incident incident, long queueId) {
+		partialUpdate(incident.getId());
+		// final long queueId = incidentDao.retrieve(incidentId).getQueueId();
+		placeController.goTo(new ItemListPlace(Actions.LIST, queueId));
+	}
+
+}

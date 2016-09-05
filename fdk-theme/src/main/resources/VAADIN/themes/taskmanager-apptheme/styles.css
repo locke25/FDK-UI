@@ -1,0 +1,166 @@
+@import url(../reindeer/legacy-styles.css);
+
+.v-generated-body {
+	background-color: #FFF;
+	background-repeat: no-repeat;	
+	background-image: url("img/Bosch.jpg");
+	background-position: 100% 50%;
+	background-size: 100%;
+	padding: 50px;
+}
+
+.v-app {
+	background-color: #FFF;
+	width: 907px;
+	height: 100%;
+	margin: 0 auto;
+	opacity: 0.5;
+	padding: 30px;
+}
+
+.v-ui {
+	background-color: #FFF;
+	width: 907px;
+	height: 100%;
+	margin: 0 auto;
+}
+
+.styleMainView {
+	
+}
+
+.mainHeader {
+	background: transparent !important;
+}
+
+.menuLayoutMain {
+	margin-top: 10px;	
+	background: transparent !important;	
+	padding: 0;
+	text-shadow: none !important;
+}
+
+.menuLayoutMain .v-embedded-image {
+	margin-left: 0px;
+}
+
+
+.v-button {
+	background: none;
+	padding: 0;
+}
+
+.menuLayoutMain .v-button .v-button-wrap{
+	background: none repeat scroll 0 0 rgba(255, 255, 255, 0.25);
+	color: #000;
+	border: 2px transparent;
+	padding: 7px 13px !important;	
+	-moz-border-radius-topleft: 8px !important;
+	-moz-border-radius-topright: 8px !important;
+	-webkit-border-top-left-radius: 8px !important;
+    -webkit-border-top-right-radius: 8px !important;    	
+}
+
+.menuLayoutMain span {
+	margin-right: 5px; 
+}
+
+.menuLayoutMain .selectedButton .v-button-wrap {
+	background: none repeat scroll 0 0 #FFF !important;
+	color: #000 !important;
+	text-shadow: none;
+}
+
+.menuLayoutMain .v-button .v-button-wrap:HOVER {
+	background: none repeat scroll 0 0 #FFF !important;
+	text-shadow: none !important;
+	color: #000 !important;
+}
+
+.menuLayoutMain .menuOverall {	
+	margin: 16px 0 0 1px;	
+	padding: 11px;	
+}
+
+.v-table-body .v-table-table tr:HOVER {
+	background: none repeat scroll 0 0 #B2CCFF !important;
+}
+
+.v-table-header {
+	background: none repeat scroll 0 0 #092A5E !important;
+	text-shadow: none;
+	color: #FFF;
+}
+
+.v-table-row-odd {
+	/*background: none repeat scroll 0 0 #B2CCFF !important;*/
+	opacity: .5;
+}
+
+.v-table {
+	border: 1px solid #092A5E;
+	
+}
+
+.itemListView {
+	margin-top: 10px;
+}
+
+.itemListView .v-table {
+	margin-left: 10px;	
+}
+
+/* .v-tabsheet-tabitem:HOVER {
+	background: none repeat scroll 0 0 #FFF !important;
+	color: #000;		
+} */
+
+.itemDetails {
+	border: 1px solid gray;
+	margin: 10px 10px;
+	height: auto !important;
+}
+
+.itemDetailsMenu {
+	margin: 0 !important;
+	padding: 0 !important;
+	padding-left: 5px;
+	background-color: #092A5E;
+}
+
+.itemDetailsContent {
+	margin: 0 !important;
+	padding: 14px !important;
+}
+
+.itemDetailsContent div div { margin-bottom: 20px !important; }
+
+.itemDetailsMenu .v-button {
+	margin-left: 5px;
+}
+
+.itemDetailsMenu .v-button * {
+	background: none repeat scroll 0 0 #092A5E !important;
+	text-shadow: none;
+	color: #FFF !important;	
+}
+
+.itemDetailsMenu .v-button:HOVER *, .itemDetailsMenu .selectedButton * {
+	background: none repeat scroll 0 0 #FFF !important;
+	color: #000 !important;
+/*	border-top: 1px solid #092A5E !important; */
+}
+
+.v-button-caption, .v-button-caption:hover {
+	border: none !important;
+}
+
+.v-tabsheet-tabs .v-tabsheet-tabitemcell-selected * { 
+	background: none repeat scroll 0 0 #FFF !important;
+	color: #000 !important;
+	border-top: 1px solid #092A5E !important;
+}
+
+.v-tabsheet-tabcontainer .v-captiontext, .v-tabsheet-tabcontainer .v-tabsheet-tabitemcell:HOVER .v-captiontext {	
+	border-top: none !important;
+}

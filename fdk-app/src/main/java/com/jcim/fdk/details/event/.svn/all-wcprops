@@ -1,0 +1,17 @@
+K 25
+svn:wc:ra_dav:version-url
+V 125
+/repos/tui/!svn/ver/1092/trunk/taskmanager-project/taskmanager-app/src/main/java/com/inubit/tui/taskmanager/app/details/event
+END
+ContactSelectedEvent.java
+K 25
+svn:wc:ra_dav:version-url
+V 151
+/repos/tui/!svn/ver/1092/trunk/taskmanager-project/taskmanager-app/src/main/java/com/inubit/tui/taskmanager/app/details/event/ContactSelectedEvent.java
+END
+CategorySelectedEvent.java
+K 25
+svn:wc:ra_dav:version-url
+V 151
+/repos/tui/!svn/ver/748/trunk/taskmanager-project/taskmanager-app/src/main/java/com/inubit/tui/taskmanager/app/details/event/CategorySelectedEvent.java
+END

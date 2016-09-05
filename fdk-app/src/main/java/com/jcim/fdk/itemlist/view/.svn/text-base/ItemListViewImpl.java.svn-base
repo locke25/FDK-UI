@@ -1,0 +1,1003 @@
+package com.inubit.tui.taskmanager.app.itemlist.view;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
+import java.util.regex.Pattern;
+
+import net.anotheria.moskito.aop.annotation.Monitor;
+
+import org.apache.commons.lang.StringUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.context.support.ResourceBundleMessageSource;
+import org.vaadin.addons.lazyquerycontainer.LazyQueryContainer;
+
+import com.inubit.gui.vaadin.mvp.shell.Shell;
+import com.inubit.gui.vaadin.mvp.view.impl.IsVaadinComponent;
+import com.inubit.tui.taskmanager.app.TaskManagerApplication;
+import com.inubit.tui.taskmanager.app.components.IncidentTable;
+import com.inubit.tui.taskmanager.app.itemlist.subviews.GlobalSearchView;
+import com.inubit.tui.taskmanager.app.itemlist.util.IdentLazyQueryContainer;
+import com.inubit.tui.taskmanager.app.itemlist.util.IdentLazyQueryContainer.QuerySource;
+import com.inubit.tui.taskmanager.app.itemlist.util.IncidentDetailSearchQueryFactoryImpl;
+import com.inubit.tui.taskmanager.app.itemlist.util.IncidentFilterQueryFactoryImpl;
+import com.inubit.tui.taskmanager.app.itemlist.util.IncidentQueryFactory;
+import com.inubit.tui.taskmanager.app.itemlist.util.IncidentSearchQueryFactoryImpl;
+import com.inubit.tui.taskmanager.app.masterdatamanagement.util.FilterBean;
+import com.inubit.tui.taskmanager.app.popupviews.FilterPopup;
+import com.inubit.tui.taskmanager.app.util.CategoryTreeContainerUtil;
+import com.inubit.tui.taskmanager.app.workbench.activity.WorkbenchMVPSubContainer.Actions;
+import com.inubit.tui.taskmanager.persistence.dao.AgencyDao;
+import com.inubit.tui.taskmanager.persistence.dao.CategoryDao;
+import com.inubit.tui.taskmanager.persistence.dao.FilterDao;
+import com.inubit.tui.taskmanager.persistence.dao.Filter_CategoryDao;
+import com.inubit.tui.taskmanager.persistence.dao.Filter_ThreeLcDao;
+import com.inubit.tui.taskmanager.persistence.dao.HistoryEntryDao;
+import com.inubit.tui.taskmanager.persistence.dao.InboxMessageDao;
+import com.inubit.tui.taskmanager.persistence.dao.IncidentDao;
+import com.inubit.tui.taskmanager.persistence.dao.QueueDao;
+import com.inubit.tui.taskmanager.persistence.dao.ServiceDifferenceDao;
+import com.inubit.tui.taskmanager.persistence.dao.SolutionCategoryDao;
+import com.inubit.tui.taskmanager.persistence.dao.ThreelcDao;
+import com.inubit.tui.taskmanager.persistence.domain.Filter;
+import com.inubit.tui.taskmanager.persistence.domain.Filter_Category;
+import com.inubit.tui.taskmanager.persistence.domain.Filter_ThreeLc;
+import com.inubit.tui.taskmanager.persistence.domain.Incident;
+import com.inubit.tui.taskmanager.persistence.domain.Queue;
+import com.inubit.tui.taskmanager.persistence.domain.ServiceDifference;
+import com.inubit.tui.taskmanager.persistence.domain.SolutionCategory;
+import com.inubit.tui.taskmanager.persistence.domain.ThreeLc;
+import com.inubit.tui.taskmanager.persistence.domain.category.Category;
+import com.inubit.tui.taskmanager.persistence.domain.category.StandardCategory;
+import com.inubit.tui.taskmanager.persistence.dto.SearchFilter;
+import com.inubit.tui.taskmanager.persistence.dto.SearchParameter;
+import com.inubit.tui.taskmanager.security.dao.UserCallDao;
+import com.inubit.tui.taskmanager.security.domain.Permission;
+import com.inubit.tui.taskmanager.security.domain.User;
+import com.inubit.tui.taskmanager.service.IncidentLockService;
+import com.inubit.tui.taskmanager.service.ServiceFacade;
+import com.inubit.tui.taskmanager.service.category.CategoryService;
+import com.inubit.tui.taskmanager.utils.version.NetworkUtil;
+import com.inubit.tui.taskmanager.utils.version.RevisionUtils;
+import com.vaadin.data.Container;
+import com.vaadin.data.Item;
+import com.vaadin.data.Property.ValueChangeEvent;
+import com.vaadin.data.Property.ValueChangeListener;
+import com.vaadin.data.util.BeanItemContainer;
+import com.vaadin.event.Action;
+import com.vaadin.event.ItemClickEvent;
+import com.vaadin.event.ItemClickEvent.ItemClickListener;
+import com.vaadin.event.ShortcutAction.KeyCode;
+import com.vaadin.terminal.ExternalResource;
+import com.vaadin.terminal.ThemeResource;
+import com.vaadin.ui.Button;
+import com.vaadin.ui.Button.ClickEvent;
+import com.vaadin.ui.Button.ClickListener;
+import com.vaadin.ui.ComboBox;
+import com.vaadin.ui.Component;
+import com.vaadin.ui.CssLayout;
+import com.vaadin.ui.Label;
+import com.vaadin.ui.TextField;
+import com.vaadin.ui.Window;
+import com.vaadin.ui.Window.Notification;
+
+@Monitor
+public class ItemListViewImpl extends CssLayout implements ItemListView, IsVaadinComponent {
+
+	private static final Logger log = LoggerFactory.getLogger(ItemListViewImpl.class);
+
+	static final Action ACTION_RESET = new Action("");
+
+	static final Action ACTION_EDIT_PRIORITY = new Action("");
+
+	static final Action[] ACTIONS = new Action[] { ACTION_RESET, ACTION_EDIT_PRIORITY };
+
+	private Presenter presenter;
+
+	private IncidentTable listTable;
+
+	private List<Button> listQueues;
+
+	private Button addIncidentBtn;
+
+	private Button reloadIncidents;
+
+	private Label labelInProcess;
+
+	private Label labelActualSize;
+
+	private TextField searchField;
+
+	private Button searchBtn;
+
+	private Button filterBtn;
+
+	private ComboBox centralFilterList;
+
+	private IdentLazyQueryContainer lazyContainer;
+
+	private IncidentQueryFactory incidentQueryFactory;
+
+	private IdentLazyQueryContainer lazySearchContainer;
+
+	private IncidentSearchQueryFactoryImpl incidentSearchQueryFactory;
+
+	private IdentLazyQueryContainer lazyDetailSearchContainer;
+
+	private IncidentDetailSearchQueryFactoryImpl incidentDetailSearchQueryFactory;
+
+	private IdentLazyQueryContainer lazyFilterContainer;
+
+	private IncidentFilterQueryFactoryImpl incidentFilterQueryFactoryImpl;
+
+	private Pattern p = Pattern.compile("([-+]?[\"]?[\\p{L} \\p{Nd}][.]?+[\"]?[*]?[(\\s)?AND,NOT,OR]?(\\s)?)+", Pattern.CASE_INSENSITIVE);
+
+	private IncidentDao incidentDao;
+
+	private CategoryDao categoryDao;
+
+	private FilterDao filterDao;
+
+	private Filter_ThreeLcDao filter_ThreeLcDao;
+
+	private Filter_CategoryDao filter_CategoryDao;
+
+	private QueueDao queueDao;
+
+	private ThreelcDao threelcDao;
+
+	private ServiceDifferenceDao serviceDifferenceDao;
+
+	private InboxMessageDao inboxMessageDao;
+
+	private Window win;
+
+	private ServiceFacade serviceFacade;
+
+	private boolean queueError;
+
+	private boolean isSearchParam;
+
+	private Queue currentQueue;
+
+	// private String searchParameter;
+	private SearchParameter searchParameters;
+
+	private SearchFilter searchFilter;
+
+	private Button globalResearchBtn;
+
+	private Button logoutButton;
+
+	private GlobalSearchView globalSearchView;
+
+	ResourceBundleMessageSource messageSource;
+
+	private CssLayout queueButtons;
+
+	private TaskManagerApplication app;
+
+	private Shell shell;
+
+	private Label labelRevision;
+
+	private Button btnPrintLockIncidentService;
+
+	private ThemeResource filterIconInactive;
+
+	private ThemeResource filterIconActive;
+
+	private final AgencyDao agencyDao;
+
+	private final UserCallDao userCallDao;
+
+	private final HistoryEntryDao historyDao;
+
+	private FilterPopup filterPopup;
+
+	private final IncidentLockService incidentLockService;
+
+	private final CategoryService categoryService;
+
+	public ItemListViewImpl(final IncidentDao incidentDao, final QueueDao queueDao, final ServiceFacade serviceFacade, final CategoryDao categoryDao,
+			final ServiceDifferenceDao serviceDifferenceDao, final SolutionCategoryDao solutionCategoryDao, final InboxMessageDao inboxMessageDao,
+			final FilterDao filterDao, final Filter_ThreeLcDao filter_ThreeLcDao, final Filter_CategoryDao filter_CategoryDao,
+			final ThreelcDao threelcDao, final AgencyDao agencyDao, final ResourceBundleMessageSource messageSource,
+			final TaskManagerApplication app, final UserCallDao userCallDao, final HistoryEntryDao historyDao,
+			final IncidentLockService incidentLockService, final CategoryService categoryService) {
+		super();
+		this.app = app;
+		this.incidentDao = incidentDao;
+		this.serviceFacade = serviceFacade;
+		this.categoryDao = categoryDao;
+		this.serviceDifferenceDao = serviceDifferenceDao;
+		this.inboxMessageDao = inboxMessageDao;
+		this.messageSource = messageSource;
+
+		this.agencyDao = agencyDao;
+		this.userCallDao = userCallDao;
+		this.historyDao = historyDao;
+		this.filterDao = filterDao;
+		this.filter_ThreeLcDao = filter_ThreeLcDao;
+		this.filter_CategoryDao = filter_CategoryDao;
+		this.queueDao = queueDao;
+		this.threelcDao = threelcDao;
+		this.incidentLockService = incidentLockService;
+		this.categoryService = categoryService;
+
+		currentQueue = null;
+		win = new Window();
+		buildAndLoadQueuesInSelect();
+		ACTION_RESET.setCaption(messageSource.getMessage("incidentDetails.action.reset", null, Locale.getDefault()));
+		ACTION_EDIT_PRIORITY.setCaption(messageSource.getMessage("incidentDetails.action.prioity", null, Locale.getDefault()));
+
+		btnPrintLockIncidentService = new Button("print incident locked");
+		btnPrintLockIncidentService.setStyleName("printIncidentLocked");
+		addComponent(btnPrintLockIncidentService);
+
+		CssLayout buttonBoxLayout = new CssLayout();
+		CssLayout searchContentLayout = new CssLayout();
+		CssLayout clearBothLayout = new CssLayout();
+
+		buildAddButton(buttonBoxLayout);
+		buildReloadBtn(buttonBoxLayout);
+
+		buttonBoxLayout.setStyleName("buttonbox");
+		addComponent(buttonBoxLayout);
+
+		buildSearch(searchContentLayout);
+
+		searchContentLayout.setStyleName("searchContent");
+		addComponent(searchContentLayout);
+
+		clearBothLayout.setStyleName("cb");
+
+		addComponent(clearBothLayout);
+
+		// initial we show first queue
+		incidentQueryFactory = new IncidentQueryFactory(incidentDao, queueError ? 0 : ((Queue) listQueues.get(0).getData()).getId(), messageSource,
+				incidentLockService, userCallDao);
+
+		lazyContainer = new IdentLazyQueryContainer(incidentQueryFactory, false, 50, QuerySource.QUEUESEARCH);
+
+		buildTable(lazyContainer);
+
+		registerEventhandler(this);
+		setStyleName("itemListView marker");
+
+		labelRevision = new Label();
+		labelRevision.setImmediate(true);
+		labelRevision.setStyleName("revision");
+
+		labelInProcess = new Label();
+		labelInProcess.setImmediate(true);
+		labelInProcess.setStyleName("labelInProcess");
+		buttonBoxLayout.addComponent(labelInProcess);
+
+		labelActualSize = new Label();
+		labelActualSize.setImmediate(true);
+		buttonBoxLayout.addComponent(labelActualSize);
+
+		try {
+			String macAddress = NetworkUtil.getMacAddress();
+			if (!NetworkUtil.getBlacklistedMacAddresses().contains(macAddress)) {
+				labelRevision.setValue("Revision: " + RevisionUtils.getCurrentSVNRevision());
+				addComponent(labelRevision);
+			}
+		} catch (Exception e) {
+			// do nothing
+		}
+
+		if (TaskManagerApplication.DEBUGMODEENABLED) {
+			win.setDebugId("itemlistview.winpopup");
+			labelRevision.setDebugId("itemlistview.labelrevision");
+			buttonBoxLayout.setDebugId("itemlistview.buttonBoxLayout");
+			searchContentLayout.setDebugId("itemListView.searchContentLayout");
+			clearBothLayout.setDebugId("itemListView.clearBothLayout");
+			listTable.setDebugId("itemlistview.listtabel");
+			setDebugId("itemlistview.host");
+		}
+
+		// DebugIdHelper.setComponentDebugId(this,
+		// TaskManagerApplication.DEBUGMODEENABLED, "ItemListViewImpl", 0);
+	}
+
+	@Override
+	public void updateIncidentLockInformation(Long id) {
+		if (id != null) {
+			User user = (User) app.getUser();
+
+			Object[] params = { id.toString(), user.getFirstName(), user.getLastName(), user.getUserName() };
+
+			labelInProcess.setCaption(messageSource.getMessage("lbl.inprocess.incident", params, Locale.getDefault()));
+		} else
+			labelInProcess.setCaption("");
+	}
+
+	private void updateQuerySizeDisplay(Long size) {
+		Object[] params = { size.toString() };
+		labelActualSize.setCaption(messageSource.getMessage("lbl.querysize.incident", params, Locale.getDefault()));
+	}
+
+	private void buildSearch(CssLayout searchContent) {
+
+		filterBtn = new Button();
+
+		if (TaskManagerApplication.DEBUGMODEENABLED)
+			filterBtn.setDebugId("itemList.filterBtn");
+
+		filterBtn.setImmediate(true);
+		filterBtn.setDescription(messageSource.getMessage("itemListView.mouseover.filterBtn", null, Locale.getDefault()));
+		filterIconInactive = new ThemeResource("img/icons/filter.png");
+		filterIconActive = new ThemeResource("img/icons/filter_active.png");
+		filterBtn.setIcon(filterIconInactive);
+		filterBtn.setStyleName("filterBtn");
+		searchContent.addComponent(filterBtn);
+
+		centralFilterList = new ComboBox();
+		centralFilterList.setImmediate(true);
+		// fillCentralFilterList();
+		searchContent.addComponent(centralFilterList);
+
+		searchField = new TextField();
+		searchField.setImmediate(true);
+		searchField.setDescription(messageSource.getMessage("itemListView.mouseover.searchField", null, Locale.getDefault()));
+		searchField.setInputPrompt("Suche");
+		searchField.setStyleName("searchField");
+
+		searchContent.addComponent(searchField);
+
+		searchBtn = new Button();
+		searchBtn.setImmediate(true);
+		searchBtn.setDescription(messageSource.getMessage("itemListView.mouseover.searchBtn", null, Locale.getDefault()));
+		searchBtn.setIcon(new ThemeResource("img/icons/icon_search.png"));
+		searchBtn.setClickShortcut(KeyCode.ENTER, null);
+
+		searchContent.addComponent(searchBtn);
+
+		if (TaskManagerApplication.DEBUGMODEENABLED) {
+			filterBtn.setDebugId("itemlistview.filterbutton");
+			searchField.setDebugId("itemlistview.seachField");
+			searchBtn.setDebugId("itemlistview.searchBtn");
+		}
+	}
+
+	private void buildReloadBtn(CssLayout container) {
+		reloadIncidents = new Button();
+
+		if (TaskManagerApplication.DEBUGMODEENABLED)
+			reloadIncidents.setDebugId("itemList.reloadIncidents");
+
+		reloadIncidents.setImmediate(true);
+		reloadIncidents.setDescription(messageSource.getMessage("itemListView.mouseover.reloadIncidents", null, Locale.getDefault()));
+		reloadIncidents.setStyleName("reloadBtn");
+		reloadIncidents.setIcon(new ThemeResource("img/icons/icon_reload.png"));
+
+		container.addComponent(reloadIncidents);
+	}
+
+	private void buildAddButton(CssLayout container) {
+		addIncidentBtn = new Button(messageSource.getMessage("btn.add.incident", null, Locale.getDefault()));
+
+		addIncidentBtn.setImmediate(true);
+		addIncidentBtn.setDescription(messageSource.getMessage("itemListView.mouseover.addIncidentBtn", null, Locale.getDefault()));
+		addIncidentBtn.setStyleName("addIncidentBtn");
+		addIncidentBtn.setIcon(new ThemeResource("img/icons/icon_new.png"));
+
+		container.addComponent(addIncidentBtn);
+
+		if (TaskManagerApplication.DEBUGMODEENABLED)
+			addIncidentBtn.setDebugId("itemList.addIncidentBtn");
+	}
+
+	private void buildAndLoadQueuesInSelect() {
+
+		String userId = ((User) app.getUser()).getId();
+		List<Queue> queues = serviceFacade.getVisibleQueues(userId);
+
+		if (queues.size() == 0) {
+			queueError = true;
+		}
+
+		BeanItemContainer<Queue> container = new BeanItemContainer<Queue>(Queue.class);
+		container.addAll(queues);
+
+		listQueues = new ArrayList<Button>();
+		CssLayout queueContent = new CssLayout();
+		queueContent.setStyleName("queueContent");
+
+		queueButtons = new CssLayout();
+		queueButtons.setStyleName("queueButttons");
+		for (Queue queue : queues) {
+//			final Button b = new Button(queue.getName() + " (" + queue.getIncidentCount() + ")");
+			
+			final Button b = new Button(queue.getName());
+			if (TaskManagerApplication.DEBUGMODEENABLED) {
+				b.setDebugId("itemList.queueBut_" + queue.getName());
+			}
+			b.setData(queue);
+			b.setImmediate(false);
+			if (StringUtils.isNotEmpty(queue.getMailbox()))
+				b.setDescription(queue.getMailbox());
+			queueButtons.addComponent(b);
+			listQueues.add(b);
+		}
+		queueContent.addComponent(queueButtons);
+
+		globalResearchBtn = new Button(messageSource.getMessage("btn.globalSearch", null, Locale.getDefault()));
+
+		globalResearchBtn.setStyleName("globalResearch");
+		globalResearchBtn.setIcon(new ThemeResource("img/icons/icon_globalsearch.png"));
+		queueContent.addComponent(globalResearchBtn);
+
+		User user = (User) app.getUser();
+		logoutButton = new Button(messageSource.getMessage("btn.lockout",
+				new Object[] { user.getFirstName(), user.getLastName(), user.getUserName() }, Locale.getDefault()));
+
+		if (TaskManagerApplication.DEBUGMODEENABLED) {
+			logoutButton.setDebugId("itemlistview.logoutButton");
+			globalResearchBtn.setDebugId("itemlistview.globalResBtn");
+			queueButtons.setDebugId("itemlistview.queueButtons");
+			queueContent.setDebugId("itemlistview.queueContent");
+		}
+
+		logoutButton.setStyleName("globalResearch");
+		queueContent.addComponent(logoutButton);
+
+		addComponent(queueContent);
+	}
+
+	private void buildTable(LazyQueryContainer container) {
+
+		listTable = new IncidentTable(container, messageSource, incidentDao);
+
+		if (TaskManagerApplication.DEBUGMODEENABLED)
+			listTable.setDebugId("itemList.listTable");
+
+		listTable.setImmediate(false);
+		listTable.setSelectable(true);
+		listTable.setWriteThrough(true);
+		listTable.setEditable(false);
+		sortDisabeld();
+		addComponent(listTable);
+	}
+
+	private void sortDisabeld() {
+		String userId = ((User) app.getUser()).getId();
+		boolean sortDisabled = !serviceFacade.hasPermission(userId, Permission.CAN_SORT);
+		listTable.setSortDisabled(sortDisabled);
+	}
+
+	private boolean userHasFullAccess(Object clickedItemId) {
+		String userId = ((User) app.getUser()).getId();
+		boolean isFirstItemSelected = isFirstItemSelected(clickedItemId);
+		boolean isUserCanEditAllIncident = serviceFacade.hasPermission(userId, Permission.CAN_EDIT_ALL_INCIDENTS);
+		boolean isQueryList = presenter.isQueryList();
+
+		if (isFirstItemSelected || isUserCanEditAllIncident) {
+			return true;
+		}
+
+		else if (!isQueryList || isSearchParam)
+			return true;
+
+		return false;
+	}
+
+	private boolean isFirstItemSelected(Object itemId) {
+		log.debug("listTable: " + listTable.isFirstId(itemId));
+		log.debug("listTable 2: " + ((Integer) listTable.firstItemId()).toString());
+		return ((Integer) listTable.firstItemId()) == (Integer) itemId;
+	}
+
+	private void updateTableData() {
+		QuerySource source = ((IdentLazyQueryContainer) getTableContainer()).getQuerySource();
+		switch (source) {
+		case QUEUESEARCH:
+			updateQueue(currentQueue.getId());
+			break;
+		case FILTER:
+			filterData(searchFilter);
+			break;
+		case DETAILSEARCH:
+			detailSearch(searchParameters);
+			break;
+		case VOLLTEXTSEARCH:
+			startVolltextSearch(searchField.getValue().toString());
+			break;
+		}
+	}
+
+	@Override
+	public Component asVaadinComponent() {
+		return this;
+	}
+
+	public void select(long itemId) {
+		listTable.select(itemId);
+	}
+
+	@Override
+	public void setPresenter(Presenter presenter) {
+		this.presenter = presenter;
+	}
+
+	private void registerEventhandler(final CssLayout self) {
+
+		// listTable.addListener(new Property.ValueChangeListener() {
+		// public void valueChange(ValueChangeEvent event) {
+		// updateTableData();
+		// }
+		// });
+
+		btnPrintLockIncidentService.addListener(new Button.ClickListener() {
+
+			@Override
+			public void buttonClick(ClickEvent event) {
+				app.getIncidentLockService().printContent();
+			}
+		});
+
+		btnPrintLockIncidentService.addListener(new Button.ClickListener() {
+
+			@Override
+			public void buttonClick(ClickEvent event) {
+				app.getIncidentLockService().printContent();
+			}
+		});
+
+		listTable.addActionHandler(new Action.Handler() {
+
+			@Override
+			public void handleAction(Action action, Object sender, Object target) {
+				if (target != null) {
+
+					if (action.equals(ACTION_RESET)) {
+						User user = (User) app.getUser();
+
+						Item item = listTable.getItem(target);
+						long itemId = (Long) item.getItemProperty("id").getValue();
+						Incident incident = incidentDao.retrieve(itemId);
+
+						presenter.freezeScreen(itemId, user.getId());
+						app.getIncidentLockService().freeLockByIncident(incident);
+						// Status status = presenter.resetStatus(itemId);
+						// changeStatusIcon(status, (Embedded)
+						// item.getItemProperty("statePic").getValue());
+						updateTableData();
+
+						Long lockedUserId = app.getIncidentLockService().userHasLocked(user);
+						updateIncidentLockInformation(lockedUserId);
+					}
+
+					if (action.equals(ACTION_EDIT_PRIORITY)) {
+						Item item = listTable.getItem(target);
+						listTable.setItemSelecteByContextMenue(item);
+						listTable.setEditable(true);
+					}
+				}
+			}
+
+			@Override
+			public Action[] getActions(Object target, Object sender) {
+				List<Action> actions = new ArrayList<Action>();
+				String userId = ((User) app.getUser()).getId();
+				if (serviceFacade.hasPermission(userId, Permission.CAN_CHANGE_PRIORITY)) {
+					actions.add(ACTION_EDIT_PRIORITY);
+				}
+				if (serviceFacade.hasPermission(userId, Permission.FREE_LOCK_INCIDENT)) {
+					actions.add(ACTION_RESET);
+				}
+				return actions.toArray(new Action[actions.size()]);
+			}
+		});
+
+		ItemClickListener tableItemClickedListener = new ItemClickListener() {
+
+			@Override
+			public void itemClick(ItemClickEvent event) {
+
+				long clickedItemId = (Long) event.getItem().getItemProperty("id").getValue();
+				Object internalItemId = event.getItemId();
+				boolean doubleClicked = event.isDoubleClick();
+
+				if (doubleClicked) {
+
+					// if (app.getIncidentLockService().isLocked(((User)
+					// app.getUser()).getId(), clickedItemId)) {
+					// shell.showNotification(messageSource.getMessage("process.authorization.lockedItem",
+					// null, Locale.getDefault()));
+					// return;
+					// }
+
+					if (userHasFullAccess(internalItemId))
+
+						// try {
+						presenter.onItemSelection(Actions.SHOW, clickedItemId);
+					// } catch (IncidentLockException e) {
+					// log.debug("IncidentLockException occured, Message -> {}",
+					// e.getIncidentLockException());
+					// shell.showNotification(messageSource.getMessage("process.authorization.lockedItem",
+					// null, Locale.getDefault()));
+					// }
+					else
+						shell.showNotification(messageSource.getMessage("process.authorization.firstItem", null, Locale.getDefault()));
+				}
+			}
+		};
+
+		listTable.addListener(tableItemClickedListener);
+
+		for (final Button btn : listQueues) {
+			btn.addListener(new Button.ClickListener() {
+
+				@Override
+				public void buttonClick(ClickEvent event) {
+					log.debug("QueueChangeEvent - {}", ((Queue) btn.getData()).getName());
+
+					// try {
+					presenter.onItemSelection(Actions.LIST, ((Queue) btn.getData()).getId());
+					// } catch (IncidentLockException e) {
+					// // do nothing, in this case the exception couldn't occur
+					// }
+
+					if (globalSearchView != null && globalSearchView.isVisible()) {
+						globalSearchView.clearFields();
+						globalSearchView.setVisible(false);
+					}
+
+					listTable.setContainerDataSource(lazyContainer);
+					updateQuerySizeDisplay(new Long(listTable.size()));
+				}
+			});
+		}
+
+		addIncidentBtn.addListener(new Button.ClickListener() {
+
+			@Override
+			public void buttonClick(ClickEvent event) {
+				if (app.getIncidentLockService().isLocked((User) app.getUser())) {
+					long incidentId = app.getIncidentLockService().getLockedIncidentId(((User) app.getUser()));
+					shell.showNotification(messageSource.getMessage("process.authorization.lockedItem", new Object[] { incidentId },
+							Locale.getDefault()));
+					return;
+				}
+
+				// try {
+				presenter.onItemSelection(Actions.CREATE, currentQueue.getId());
+				// } catch (IncidentLockException e) {
+				// log.debug("IncidentLockException occured, Message -> {}",
+				// e.getIncidentLockException());
+				// shell.showNotification(messageSource.getMessage("process.authorization.lockedItem",
+				// null, Locale.getDefault()));
+				// }
+			}
+		});
+
+		reloadIncidents.addListener(new Button.ClickListener() {
+
+			@Override
+			public void buttonClick(ClickEvent event) {
+				updateTableData();
+			}
+		});
+
+		globalResearchBtn.addListener(new Button.ClickListener() {
+
+			@Override
+			public void buttonClick(ClickEvent event) {
+				if (globalSearchView == null) {
+					globalSearchView = new GlobalSearchView(messageSource, TaskManagerApplication.DEBUGMODEENABLED, categoryDao,
+							currentQueue.getId(), categoryService);
+					globalSearchView.setPresenter(presenter);
+					globalSearchView.setStyleName("globalSearchView");
+					globalSearchView.setVisible(false);
+					presenter.setData();
+					addComponent(globalSearchView, 1);
+
+				}
+
+				if (globalSearchView.isVisible()) {
+					globalSearchView.unsetShortCutForSubmitBtn();
+					searchBtn.setClickShortcut(KeyCode.ENTER, null);
+					globalSearchView.setVisible(false);
+				} else {
+					searchBtn.removeClickShortcut();
+					globalSearchView.setShortCutForSubmitBtn();
+					globalSearchView.clearFields();
+					globalSearchView.setVisible(true);
+				}
+			}
+		});
+		filterBtn.addListener(new ClickListener() {
+
+			@Override
+			public void buttonClick(ClickEvent event) {
+
+				searchField.setValue("");
+				win.removeAllComponents();
+				filterPopup = new FilterPopup(messageSource, presenter, categoryService);
+				filterPopup.setContainerAndClearFields(CategoryTreeContainerUtil.fillCategoryIndexedContainer(categoryService, null, null));
+				win.removeAllComponents();
+				win.setSizeUndefined();
+				win.setModal(true);
+				win.setContent(filterPopup);
+				win.center();
+				win.setResizable(false);
+				win.setStyleName("filterPopupWindow");
+				self.getWindow().addWindow(win);
+			}
+		});
+
+		centralFilterList.addListener(new ValueChangeListener() {
+
+			@Override
+			public void valueChange(ValueChangeEvent event) {
+
+				SearchFilter filter = new SearchFilter();
+				if (centralFilterList.getValue() != null) {
+					FilterBean selectedFilter = getBean((Filter) centralFilterList.getValue());
+					filter.setCategoryIdList(selectedFilter.getCategoryId());
+					filter.setThreeLc(selectedFilter.getThreeLcs());
+				}
+
+				presenter.filterResults(filter);
+			}
+		});
+
+		searchBtn.addListener(new Button.ClickListener() {
+
+			@Override
+			public void buttonClick(ClickEvent event) {
+				presenter.filterResults(new SearchFilter());
+				startVolltextSearch(searchField.getValue().toString());
+			}
+		});
+
+		logoutButton.addListener(new Button.ClickListener() {
+
+			@Override
+			public void buttonClick(ClickEvent event) {
+
+				User user = (User) app.getUser();
+
+				if (app.getIncidentLockService().isLocked(user)) {
+					long incidentId = app.getIncidentLockService().getLockedIncidentId(user);
+					shell.showNotification(messageSource.getMessage("process.authorization.lockedItemLockout", new Object[] { incidentId },
+							Locale.getDefault()));
+					// app.getIncidentLockService().freeLock(userId);
+					return;
+				}
+				app.logout();
+				app.getMainWindow().open(new ExternalResource(app.getURL()));
+			}
+		});
+
+	}
+
+	public boolean isQueueError() {
+		return queueError;
+	}
+
+	public void updateQueue(long queueId) {
+		log.debug("QueueChangeEvent invoked from Updateevent- {}", queueId);
+		incidentQueryFactory.setSearchFilter(new SearchFilter());
+		searchField.setValue("");
+
+		Queue newQueue = queueDao.retrieve(queueId);
+
+		if (currentQueue == null || currentQueue.getId() != queueId) {
+			currentQueue = newQueue;
+			fillCentralFilterList();
+		}
+		currentQueue = newQueue;
+
+		incidentQueryFactory.setQueueId(currentQueue.getId());
+		lazyContainer.discard();
+		isSearchParam = false;
+
+		// if (centralFilterList.getValue() != null) {
+		// SearchFilter filter = new SearchFilter();
+		// if (centralFilterList.getValue() != null) {
+		// FilterBean selectedFilter = (FilterBean)
+		// centralFilterList.getValue();
+		// filter.setCategoryIdList(selectedFilter.getCategoryId());
+		// filter.setThreeLc(selectedFilter.getThreeLcs());
+		// }
+		//
+		// presenter.filterResults(filter);
+		// }
+
+		for (Button navigationButton : listQueues) {
+			if (navigationButton.getStyleName().equals("selectedButton")) {
+				navigationButton.setStyleName("");
+			}
+			if (((Queue) navigationButton.getData()).equals(currentQueue)) {
+				navigationButton.setStyleName("selectedButton");
+				String caption = navigationButton.getCaption();
+				int origSize = listTable.size() - 1;
+				if (caption != null) {
+					caption = caption.replace("(" + origSize + ")", "(" + listTable.size() + ")");
+				}
+				navigationButton.setCaption(caption);
+			}
+		}
+
+		sortDisabeld();
+		updateQuerySizeDisplay(new Long(listTable.size()));
+	}
+
+	@Override
+	public void startVolltextSearch(String searchterm) {
+
+		// add wildcard if not exist TTKM-1823
+		if (searchterm.length() > 0 && searchterm.charAt(searchterm.length() - 1) != '*') {
+			searchterm += "*";
+		}
+
+		if (p.matcher(searchterm).matches()) {
+			listTable.setSortContainerPropertyId(null);
+			incidentSearchQueryFactory = new IncidentSearchQueryFactoryImpl(incidentDao, searchterm, messageSource, incidentLockService, userCallDao);
+
+			lazySearchContainer = new IdentLazyQueryContainer(incidentSearchQueryFactory, false, 50, QuerySource.VOLLTEXTSEARCH);
+			listTable.setLazyContainerProperty(lazySearchContainer);
+			listTable.setContainerDataSource(lazySearchContainer);
+
+		} else {
+			if (StringUtils.isEmpty(searchterm))
+				listTable.setContainerDataSource(lazyContainer);
+			else
+				getWindow().showNotification(messageSource.getMessage("incidentDetails.searchTerm.error", null, Locale.getDefault()), "",
+						Notification.TYPE_WARNING_MESSAGE);
+		}
+		isSearchParam = true;
+		sortDisabeld();
+		updateQuerySizeDisplay(new Long(listTable.size()));
+	}
+
+	@Override
+	public void detailSearch(SearchParameter searchParameter) {
+		this.searchParameters = searchParameter;
+		incidentDetailSearchQueryFactory = new IncidentDetailSearchQueryFactoryImpl(incidentDao, searchParameter, messageSource, incidentLockService,
+				userCallDao);
+		listTable.setSortContainerPropertyId(null);
+		lazyDetailSearchContainer = new IdentLazyQueryContainer(incidentDetailSearchQueryFactory, false, 50, QuerySource.DETAILSEARCH);
+		listTable.setLazyContainerProperty(lazyDetailSearchContainer);
+		listTable.setContainerDataSource(lazyDetailSearchContainer);
+		lazyDetailSearchContainer.discard();
+		isSearchParam = true;
+		sortDisabeld();
+		updateQuerySizeDisplay(new Long(listTable.size()));
+	}
+
+	@Override
+	public void setDataForGlobalSearchView(List<ServiceDifference> listService, List<SolutionCategory> listSolution) {
+		globalSearchView.setData(listService, listSolution);
+
+	}
+
+	@Override
+	public void filterData(SearchFilter searchFilter) {
+		assert searchFilter != null;
+
+		if (searchFilter.isFiltering()) {
+			filterBtn.setIcon(filterIconActive);
+		} else {
+			filterBtn.setIcon(filterIconInactive);
+		}
+
+		this.searchFilter = searchFilter;
+		incidentFilterQueryFactoryImpl = new IncidentFilterQueryFactoryImpl(incidentDao, messageSource, searchFilter, incidentLockService,
+				userCallDao,currentQueue.getId());
+		listTable.setSortContainerPropertyId(null);
+		lazyFilterContainer = new IdentLazyQueryContainer(incidentFilterQueryFactoryImpl, false, 50, QuerySource.FILTER);
+		listTable.setLazyContainerProperty(lazyFilterContainer);
+		listTable.setContainerDataSource(lazyFilterContainer);
+		lazyFilterContainer.discard();
+		sortDisabeld();
+		updateQuerySizeDisplay(new Long(listTable.size()));
+
+	}
+
+	private void fillCentralFilterList() {
+		centralFilterList.removeAllItems();
+		List<Filter> filterList = new ArrayList<Filter>();
+		if (currentQueue != null) {
+			filterList = filterDao.getEntrysForQueue(currentQueue);
+		}
+
+		// List<FilterBean> filterBeanList = new ArrayList<FilterBean>();
+		for (Filter filter : filterList) {
+			centralFilterList.addItem(filter);
+			centralFilterList.setItemCaption(filter, filter.getFilterName());
+			// filterBeanList.add(getBean(filter));
+		}
+		// for (FilterBean filterBean : filterBeanList) {
+		// centralFilterList.addItem(filterBean);
+		// centralFilterList.setItemCaption(filterBean,
+		// filterBean.getFilterName());
+		// }
+	}
+
+	private FilterBean getBean(final Filter filter) {
+
+		FilterBean filterBean = new FilterBean();
+		filterBean.setId(filter.getId());
+
+		filterBean.setFilterName(filter.getFilterName());
+
+		List<Filter_Category> filter_CategoryList = filter_CategoryDao.getEntrysForFilterId(filter.getId());
+
+		List<Long> categoryIds = new ArrayList<Long>();
+		String categories = "";
+		for (Filter_Category filter_Category : filter_CategoryList) {
+			Category category = categoryDao.retrieve(filter_Category.getCategoryId());
+			categoryIds.add(category.getId());
+			categories = categories + " " + category.getName();
+		}
+
+		filterBean.setCategoryId(categoryIds);
+		filterBean.setCategory(categories);
+
+		filterBean.setQueueId(filter.getQueueId());
+		Queue queue = queueDao.retrieve(filter.getQueueId());
+		filterBean.setQueue(queue != null ? queue.getName() : "-----");
+
+		List<Filter_ThreeLc> filter_ThreeLcList = filter_ThreeLcDao.getEntrysForFilterId(filter.getId());
+
+		List<Long> threeLcIds = new ArrayList<Long>();
+		String threeLcs = "";
+		for (Filter_ThreeLc filter_ThreeLc : filter_ThreeLcList) {
+			ThreeLc threeLc = threelcDao.retrieve(filter_ThreeLc.getThreeLcId());
+			threeLcIds.add(threeLc.getId());
+			threeLcs = threeLcs + " " + threeLc.getThreeLc();
+		}
+		filterBean.setThreeLcs(threeLcs);
+		filterBean.setThreeLcIds(threeLcIds);
+
+		return filterBean;
+
+	}
+
+	@Override
+	public Container getTableContainer() {
+		return listTable.getContainerDataSource();
+	}
+
+	@Override
+	public void removePopup() {
+		if (this.getWindow() != null)
+			this.getWindow().removeWindow(win);
+	}
+
+	public void setShell(Shell shell) {
+		this.shell = shell;
+	}
+
+	public boolean pushUnlockIncidentChange(Incident incident, Queue queue) {
+		if (queue.equals(currentQueue)) {
+			updateTableData();
+			return true;
+		}
+		return false;
+	}
+
+	public boolean pushLockIncidentChange(Incident incident, Queue queue) {
+		if (queue.equals(currentQueue)) {
+			updateTableData();
+			return true;
+		}
+		return false;
+	}
+
+	@Override
+	public GlobalSearchView getGlobalSearchView() {
+		return globalSearchView;
+	}
+
+	public FilterPopup getFilterPopup() {
+		return filterPopup;
+	}
+
+}

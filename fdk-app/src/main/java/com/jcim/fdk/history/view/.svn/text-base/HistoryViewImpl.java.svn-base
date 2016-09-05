@@ -1,0 +1,138 @@
+package com.inubit.tui.taskmanager.app.history.view;
+
+import java.util.ArrayList;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.context.support.ResourceBundleMessageSource;
+import org.vaadin.addons.lazyquerycontainer.LazyQueryContainer;
+
+import com.inubit.gui.vaadin.mvp.view.impl.IsVaadinComponent;
+import com.inubit.tui.taskmanager.app.TaskManagerApplication;
+import com.inubit.tui.taskmanager.app.components.IncidentTable;
+import com.inubit.tui.taskmanager.app.history.util.HistoryQueryFactory;
+import com.inubit.tui.taskmanager.persistence.dao.AgencyDao;
+import com.inubit.tui.taskmanager.persistence.dao.CategoryDao;
+import com.inubit.tui.taskmanager.persistence.dao.HistoryEntryDao;
+import com.inubit.tui.taskmanager.persistence.dao.InboxMessageDao;
+import com.inubit.tui.taskmanager.security.dao.UserCallDao;
+import com.vaadin.ui.Component;
+import com.vaadin.ui.CssLayout;
+import com.vaadin.ui.Table;
+
+public class HistoryViewImpl extends CssLayout implements HistoryView, IsVaadinComponent {
+
+	private CssLayout layout;
+	private Table history;
+
+	private ArrayList<Object> visibleColumnIds = new ArrayList<Object>();
+	private ArrayList<String> visibleColumnLabels = new ArrayList<String>();
+
+	private LazyQueryContainer lazyContainer;
+	private HistoryQueryFactory historyQueryFactory;
+	private ResourceBundleMessageSource messageSource;
+
+	public HistoryViewImpl(HistoryEntryDao historyDao,UserCallDao userCallDao, CategoryDao categoryDao, ResourceBundleMessageSource resourceBundleMessageSource) {
+	   
+	    
+	    setWidth("-1px");
+		setHeight("-1px");
+		
+		messageSource = resourceBundleMessageSource;
+
+		buildColumns();
+
+		historyQueryFactory = new HistoryQueryFactory(historyDao,categoryDao,resourceBundleMessageSource,userCallDao);
+		lazyContainer = new LazyQueryContainer(historyQueryFactory, false, 150);
+
+		addContainerPropertys();
+
+		buildTable();
+		layout = buildContentDisplay();
+
+		setStyleName("historyViewContent");
+		
+		if(TaskManagerApplication.DEBUGMODEENABLED){
+			history.setDebugId("history.historyTable");
+			layout.setDebugId("history.layout");
+			setDebugId("history.host");
+		}
+	}
+
+	private void buildColumns() {
+		
+		visibleColumnIds.add("action");
+		visibleColumnIds.add("date");
+		visibleColumnIds.add("editor");
+		visibleColumnIds.add("slaState");
+		visibleColumnIds.add("priority");
+		visibleColumnIds.add("category");
+
+		visibleColumnLabels.add("Aktion");
+		visibleColumnLabels.add("Datum");
+		visibleColumnLabels.add("Bearbeiter");
+		visibleColumnLabels.add("SLA-Status");
+		visibleColumnLabels.add("Priorität");
+		visibleColumnLabels.add("Kategorie");
+	}
+
+	private void addContainerPropertys() {
+		lazyContainer.addContainerProperty("action", String.class, 0, true, false);
+		lazyContainer.addContainerProperty("date", String.class, 0, true, false);
+		lazyContainer.addContainerProperty("editor", String.class, 0, true, false);
+		lazyContainer.addContainerProperty("slaState", String.class, 0, true, false);
+		lazyContainer.addContainerProperty("priority", short.class, 0, true, false);
+		lazyContainer.addContainerProperty("category", String.class, 0, true, false);
+	}
+
+	private void buildTable() {
+		history = new IncidentTable(messageSource);
+		
+		history.setImmediate(true);
+
+		history.setContainerDataSource(lazyContainer);
+
+		history.setVisibleColumns(visibleColumnIds.toArray());
+		history.setColumnHeaders(visibleColumnLabels.toArray(new String[0]));
+
+		history.setSelectable(true);
+		history.setWriteThrough(true);
+
+		history.setWidth("-1px");
+		history.setHeight("600px");
+	}
+
+	@Override
+	public Component asVaadinComponent() {
+		return this;
+	}
+
+	private CssLayout buildContentDisplay() {
+
+		CssLayout mainLayout = new CssLayout();
+		mainLayout.setImmediate(false);
+		mainLayout.setMargin(false);
+
+		mainLayout.addComponent(history);
+
+		this.addComponent(mainLayout);
+		
+		if(TaskManagerApplication.DEBUGMODEENABLED){
+			mainLayout.setDebugId("history.mainlayout");
+		}
+		return mainLayout;
+	}
+
+	@Override
+	public void setPresenter(Presenter presenter) {
+		// we dont need it here...
+	}
+
+	@Override
+	public void updateData(long itemId) {
+		historyQueryFactory.setIncidentId(itemId);
+		lazyContainer.discard();
+		history.requestRepaint();
+	}
+
+}

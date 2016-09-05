@@ -1,0 +1,65 @@
+package com.inubit.tui.taskmanager.app.itemdetails.view;
+
+import java.util.Date;
+
+import com.inubit.gui.vaadin.mvp.shell.Shell;
+import com.inubit.gui.vaadin.mvp.view.View;
+import com.inubit.gui.vaadin.mvp.view.ViewPort;
+import com.inubit.tui.taskmanager.dto.ProcessResult;
+import com.inubit.tui.taskmanager.persistence.domain.Incident;
+import com.inubit.tui.taskmanager.persistence.domain.util.IncidentBean;
+
+public interface ItemDetailsView extends View {
+
+	public ViewPort getMenuDisplay();
+	public ViewPort getContentDisplay();
+	
+	public static interface Presenter {    	
+		
+		public void updateIncidentAndShowQueue(Incident incident, long queueId);
+		
+		public void onShowIncident(Incident incident);
+		
+		public ProcessResult externClose(Incident incident);
+    	
+    	public ProcessResult internExternClose(Incident incident);
+    	
+    	public ProcessResult finished(Incident incident, Date reminderDate);
+    	
+    	public Shell getShell();
+    	
+    	public void onBackButtonClicked();
+    	
+    	public void freeLock(final Incident incident);
+    	
+		public void resetAndJumpToList();
+
+        public void responseExists(Incident incident);
+
+        public void responseNecessary(Date reminderDate, Incident incident);
+
+		void jumpToList();
+    }
+	
+	public void setPresenter(Presenter presenter);
+	
+	public void setItem(Incident item);
+	
+	public void setEditMode();
+	
+	public void setReadOnlyMode();
+	
+	public void setCloseIncidentButtonsEnabled(boolean closeAble);
+	
+	public void overlayDetailView();
+
+	public boolean isReadOnly();
+    public void setButtonResponseExistsVisibility(boolean b);
+    public void setButtonResponseNecessaryVisibility(boolean b);
+	void showConfirmDialog(Object[] params);
+	public void addTableData(IncidentBean incident);
+	void setMenueDisabled();
+	void setResponseButtonDisabled();
+	void setOnylCancel();
+	void setCloseIncidentButtonsNoPermission();
+}

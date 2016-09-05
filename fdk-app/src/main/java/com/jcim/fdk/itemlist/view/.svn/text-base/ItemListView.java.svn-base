@@ -1,0 +1,94 @@
+package com.inubit.tui.taskmanager.app.itemlist.view;
+
+import java.util.List;
+
+import com.inubit.gui.vaadin.mvp.shell.Shell;
+import com.inubit.gui.vaadin.mvp.view.View;
+import com.inubit.tui.taskmanager.app.itemlist.subviews.GlobalSearchView;
+import com.inubit.tui.taskmanager.app.popupviews.FilterPopup;
+import com.inubit.tui.taskmanager.app.workbench.activity.WorkbenchMVPSubContainer.Actions;
+import com.inubit.tui.taskmanager.persistence.domain.Incident;
+import com.inubit.tui.taskmanager.persistence.domain.Incident.Status;
+import com.inubit.tui.taskmanager.persistence.domain.Queue;
+import com.inubit.tui.taskmanager.persistence.domain.ServiceDifference;
+import com.inubit.tui.taskmanager.persistence.domain.SolutionCategory;
+import com.inubit.tui.taskmanager.persistence.domain.category.AbstractCategory;
+import com.inubit.tui.taskmanager.persistence.domain.category.StandardCategory;
+import com.inubit.tui.taskmanager.persistence.dto.SearchFilter;
+import com.inubit.tui.taskmanager.persistence.dto.SearchParameter;
+import com.vaadin.data.Container;
+
+public interface ItemListView extends View {
+
+	void setPresenter(Presenter presenter);
+
+	/**
+	 * Presenter we have to inform about navigation events.
+	 */
+	public static interface Presenter {
+		void onItemSelection(Actions action, long itemId);
+
+		void onItemSelection(Actions action, long itemId, String searchTerm);
+
+		void onSearchStart(SearchParameter searchParameter);
+
+		void setData();
+				
+		boolean isQueryList();
+
+		void closeResultFilterPopup();
+
+		Status resetStatus(long itemId);
+
+		void filterResults(SearchFilter searchFilterParameter);
+
+		List<AbstractCategory> getSubProcessForCategory(long catId);
+
+		List<AbstractCategory> getLevel1Categories();
+
+		public void freezeScreen(final long incidentId, final String userId);
+
+		void closeCategoryFilterPopup(boolean isDetailSearch);
+		
+		void setSelectedCategory(String value, Object categoryId, boolean isDetailSearch);
+		
+		List<AbstractCategory> resolveToLevel(long categoryId);
+		
+		void onCategorySelected(long categoryId);
+		
+		List<SolutionCategory> getAvailableSolutionCategories(long categoryId, long queueId);
+	}
+
+	/**
+	 * Selects a menu item in the navigation based on its definition.
+	 */
+	void select(long itemId);
+
+	public boolean isQueueError();
+
+	void updateQueue(long queue);
+
+	void startVolltextSearch(String searchterm);
+
+	void detailSearch(SearchParameter searchParameter);
+	
+	Container getTableContainer();
+
+	void removePopup();
+
+	
+	void filterData(SearchFilter searchFilterParameter);
+	void setShell(Shell shell);
+	
+	void updateIncidentLockInformation(Long id);
+	
+	GlobalSearchView getGlobalSearchView();
+	
+	FilterPopup getFilterPopup();
+
+    boolean pushUnlockIncidentChange(Incident incident, Queue queue);
+
+    boolean pushLockIncidentChange(Incident incident, Queue queue);
+
+	void setDataForGlobalSearchView(List<ServiceDifference> findAll, List<SolutionCategory> findAll2);
+}
